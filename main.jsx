@@ -1,9 +1,946 @@
-# Copiá este archivo como .env.local y completá con tus datos de Firebase
-# Seguí el README para obtener estos valores (es gratis, tarda 5 minutos)
+import { useState, useEffect, useCallback } from "react";
 
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+// ─── STORAGE (localStorage — compartido via Firebase opcional) ────────────────
+const LS_KEY = "copa_maci_2026";
+
+function loadScores() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function persistScores(list) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {}
+}
+
+// ─── LOGO ─────────────────────────────────────────────────────────────────────
+function LogoSVG({ size = 48 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 200 200" fill="none">
+      <circle cx="100" cy="100" r="90" stroke="white" strokeWidth="14" fill="none" />
+      <path d="M 158 100 A 58 58 0 1 0 142 148"
+        stroke="white" strokeWidth="14" fill="none" strokeLinecap="round" />
+      <path d="M 58 155 L 58 90 L 100 128 L 142 90 L 142 155"
+        stroke="white" strokeWidth="14" fill="none"
+        strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ─── DATOS ────────────────────────────────────────────────────────────────────
+const PLAYERS = [
+  { id:"p01", name:"Esteban Chicco",           mat:"56229",  av:"EC" },
+  { id:"p02", name:"Juan José Hardoy",         mat:"112534", av:"JH" },
+  { id:"p03", name:"Manuel Gosende",           mat:"175387", av:"MG" },
+  { id:"p04", name:"Rodrigo López Martínez",   mat:"132679", av:"RL" },
+  { id:"p05", name:"Ignacio Trussi",           mat:"46215",  av:"IT" },
+  { id:"p06", name:"Andrés Torres Carbonell",  mat:"52274",  av:"AT" },
+  { id:"p07", name:"Federico Procaccini",      mat:"121277", av:"FP" },
+  { id:"p08", name:"Ignacio Macías",           mat:"45585",  av:"IM" },
+  { id:"p09", name:"Mariano Bustillo",         mat:"119275", av:"MB" },
+  { id:"p10", name:"Carlos Segundo Morixe",    mat:"119372", av:"CM" },
+  { id:"p11", name:"Francisco Goldaracena",    mat:"173455", av:"FG" },
+];
+
+const MONTHS = [
+  { id:"m01", label:"Marzo",      month:3,  year:2026 },
+  { id:"m02", label:"Abril",      month:4,  year:2026 },
+  { id:"m03", label:"Mayo",       month:5,  year:2026 },
+  { id:"m04", label:"Junio",      month:6,  year:2026 },
+  { id:"m05", label:"Julio",      month:7,  year:2026 },
+  { id:"m06", label:"Agosto",     month:8,  year:2026 },
+  { id:"m07", label:"Septiembre", month:9,  year:2026 },
+  { id:"m08", label:"Octubre",    month:10, year:2026 },
+];
+
+const TEES = ["Blanco","Negro","Amarillo","Azul"];
+const TEE_COLORS = { Blanco:"#e5e5e5", Negro:"#666", Amarillo:"#b8860b", Azul:"#1d4ed8" };
+
+const COURSES = {
+  "Hacoaj":       { pars:[4,3,5,4,3,5,4,4,4, 4,4,3,5,4,3,5,4,4] },
+  "Jockey Club":  { pars:[4,5,3,4,4,3,5,4,4, 4,3,5,4,4,3,5,4,4] },
+  "Los Lagartos": { pars:[4,4,3,5,4,4,3,5,4, 4,4,3,5,4,4,3,5,4] },
+  "Hindú Club":   { pars:[4,4,4,3,5,4,4,3,4, 4,4,4,3,5,4,4,3,4] },
+  "CASI":         { pars:[4,3,4,5,4,3,4,5,4, 4,3,4,5,4,3,4,5,4] },
+  "Otro campo":   { pars:[4,4,4,3,5,4,4,3,4, 4,4,4,3,5,4,4,3,4] },
+};
+const COURSE_NAMES = Object.keys(COURSES);
+
+const SEED_SCORES = [
+  { id:"s01", monthId:"m01", dateLabel:"8 Mar",  playerId:"p02", netScore:69, back9:44,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s02", monthId:"m01", dateLabel:"8 Mar",  playerId:"p04", netScore:73, back9:51,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s03", monthId:"m01", dateLabel:"8 Mar",  playerId:"p05", netScore:74, back9:43,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s04", monthId:"m01", dateLabel:"8 Mar",  playerId:"p09", netScore:81, back9:50,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s05", monthId:"m01", dateLabel:"15 Mar", playerId:"p09", netScore:74, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s06", monthId:"m01", dateLabel:"15 Mar", playerId:"p10", netScore:76, back9:null,  longDrive:true,  bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s07", monthId:"m01", dateLabel:"15 Mar", playerId:"p05", netScore:77, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s08", monthId:"m01", dateLabel:"15 Mar", playerId:"p08", netScore:85, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s09", monthId:"m01", dateLabel:"22 Mar", playerId:"p07", netScore:75, back9:41,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s10", monthId:"m01", dateLabel:"22 Mar", playerId:"p06", netScore:75, back9:44,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+  { id:"s11", monthId:"m01", dateLabel:"22 Mar", playerId:"p01", netScore:76, back9:40,   longDrive:true,  bestApproach:false, course:"Hacoaj", tee:"Blanco" },
+];
+
+// ─── LÓGICA ───────────────────────────────────────────────────────────────────
+const PTS_TABLE = [10,8,6,5,4,3];
+const calcPts = (pos, ld, ba) =>
+  (pos<=6 ? PTS_TABLE[pos-1] : pos<=12 ? 2 : 0) + (ld?1:0) + (ba?1:0);
+
+function bestScorePerPlayer(scores) {
+  const map = {};
+  scores.forEach(s => {
+    if (!map[s.playerId]) {
+      map[s.playerId] = { ...s };
+    } else {
+      const cur = map[s.playerId];
+      const better = s.netScore < cur.netScore ||
+        (s.netScore === cur.netScore && (s.back9??999) < (cur.back9??999));
+      map[s.playerId] = better
+        ? { ...s, longDrive: s.longDrive||cur.longDrive, bestApproach: s.bestApproach||cur.bestApproach }
+        : { ...cur, longDrive: cur.longDrive||s.longDrive, bestApproach: cur.bestApproach||s.bestApproach };
+    }
+  });
+  return Object.values(map);
+}
+
+function rankBest(bests) {
+  return [...bests]
+    .sort((a,b) => a.netScore!==b.netScore
+      ? a.netScore-b.netScore
+      : (a.back9??999)-(b.back9??999))
+    .map((r,i) => ({ ...r, position:i+1, points:calcPts(i+1,r.longDrive,r.bestApproach) }));
+}
+
+function monthlyRanking(monthId, scores) {
+  const ms = scores.filter(s=>s.monthId===monthId);
+  if (!ms.length) return [];
+  return rankBest(bestScorePerPlayer(ms));
+}
+
+function computeTotals(scores) {
+  return PLAYERS.map(p => {
+    let pts=0, played=0, wins=0;
+    MONTHS.forEach(m => {
+      const mine = monthlyRanking(m.id, scores).find(r=>r.playerId===p.id);
+      if (!mine) return;
+      pts+=mine.points; played++;
+      if (mine.position===1) wins++;
+    });
+    return { ...p, pts, played, wins, avg:played?(pts/played).toFixed(1):null };
+  }).sort((a,b)=>b.pts-a.pts);
+}
+
+const pById = id => PLAYERS.find(p=>p.id===id);
+const newId = () => "s"+Date.now()+Math.random().toString(36).slice(2,5);
+
+// ─── ATOMS ───────────────────────────────────────────────────────────────────
+const S = {
+  card:  { background:"#0a0a0a", border:"1px solid #1a1a1a", borderRadius:8 },
+  label: { fontSize:9, color:"#444", letterSpacing:3, textTransform:"uppercase",
+           marginBottom:6, display:"block" },
+  input: { background:"#111", border:"1px solid #2a2a2a", color:"#fff",
+           padding:"10px 12px", borderRadius:6, fontSize:14, outline:"none",
+           fontFamily:"'Barlow Condensed',sans-serif", boxSizing:"border-box", width:"100%" },
+};
+
+function Av({av, size=36}) {
+  return (
+    <div style={{width:size,height:size,borderRadius:"50%",background:"#111",
+      border:"1.5px solid #222",display:"flex",alignItems:"center",justifyContent:"center",
+      fontWeight:700,fontSize:size*0.33,color:"#ccc",flexShrink:0,
+      fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>
+      {av}
+    </div>
+  );
+}
+
+function Pos({n, size=28}) {
+  const s = n===1?{bg:"#FFD700",c:"#000"}
+          : n===2?{bg:"#C0C0C0",c:"#000"}
+          : n===3?{bg:"#8B6914",c:"#fff"}
+          : {bg:"#111",c:"#555",b:"1px solid #222"};
+  return (
+    <div style={{width:size,height:size,borderRadius:"50%",background:s.bg,color:s.c,
+      border:s.b||"none",display:"flex",alignItems:"center",justifyContent:"center",
+      fontWeight:800,fontSize:size*0.44,flexShrink:0}}>
+      {n}
+    </div>
+  );
+}
+
+function PrimaryBtn({children, onClick, disabled, style={}}) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background:disabled?"#1a1a1a":"#fff", color:disabled?"#333":"#000",
+      border:"none", padding:"12px 20px", borderRadius:6,
+      cursor:disabled?"not-allowed":"pointer", fontSize:14, fontWeight:900,
+      fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:2,
+      width:"100%", transition:"all 0.15s", ...style
+    }}>{children}</button>
+  );
+}
+
+function BackBtn({onClick, label="← VOLVER"}) {
+  return (
+    <button onClick={onClick} style={{background:"none",border:"none",color:"#555",
+      cursor:"pointer",fontSize:12,padding:0,
+      fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,marginBottom:16,
+      display:"block"}}>
+      {label}
+    </button>
+  );
+}
+
+// ─── LEADERBOARD ─────────────────────────────────────────────────────────────
+function Leaderboard({scores}) {
+  const totals = computeTotals(scores);
+  const playedMonths = MONTHS.filter(m=>scores.some(s=>s.monthId===m.id)).length;
+  const active = totals.filter(p=>p.played>0);
+
+  return (
+    <div>
+      <div style={{textAlign:"center",padding:"20px 0 26px"}}>
+        <LogoSVG size={64}/>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:34,fontWeight:900,
+          color:"#fff",letterSpacing:6,marginTop:10,lineHeight:1}}>COPA MACI</div>
+        <div style={{fontSize:10,color:"#444",letterSpacing:4,marginTop:3}}>TEMPORADA 2026</div>
+        <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:14}}>
+          {MONTHS.map(m=>{
+            const done=scores.some(s=>s.monthId===m.id);
+            return <div key={m.id} title={m.label} style={{width:24,height:5,borderRadius:3,
+              background:done?"#fff":"#1a1a1a",border:"1px solid #222"}}/>;
+          })}
+        </div>
+        <div style={{fontSize:11,color:"#444",marginTop:5}}>{playedMonths} de 8 meses jugados</div>
+      </div>
+
+      {active.length>=3&&(()=>{
+        const t=active.slice(0,3);
+        const order=[t[1],t[0],t[2]]; const hs=[86,110,68]; const ps=[2,1,3];
+        return (
+          <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:8,marginBottom:28}}>
+            {order.map((p,i)=>!p?null:(
+              <div key={p.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <Av av={p.av} size={38}/>
+                <div style={{fontSize:11,color:"#aaa",fontFamily:"'Barlow Condensed',sans-serif",
+                  fontWeight:600,textAlign:"center",maxWidth:76,lineHeight:1.2}}>
+                  {p.name.split(" ")[0]}
+                </div>
+                <div style={{width:76,height:hs[i],background:i===1?"#fff":"#111",
+                  border:`1px solid ${i===1?"#fff":"#2a2a2a"}`,borderRadius:"5px 5px 0 0",
+                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
+                  <Pos n={ps[i]} size={22}/>
+                  <div style={{fontSize:21,fontWeight:900,color:i===1?"#000":"#fff",
+                    fontFamily:"'Barlow Condensed',sans-serif"}}>{p.pts}</div>
+                  <div style={{fontSize:9,color:i===1?"#555":"#333"}}>pts</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+        {totals.map((p,i)=>(
+          <div key={p.id} style={{...S.card,padding:"10px 13px",display:"flex",
+            alignItems:"center",gap:10,opacity:p.played===0?0.25:1}}>
+            <Pos n={i+1} size={25}/>
+            <Av av={p.av} size={31}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:"#fff",fontSize:14,
+                fontFamily:"'Barlow Condensed',sans-serif",
+                whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+              <div style={{fontSize:10,color:"#444"}}>
+                Mat. {p.mat}
+                {p.played>0&&` · ${p.played} mes${p.played>1?"es":""}${p.wins?" · "+p.wins+"🏆":""}`}
+              </div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontSize:24,fontWeight:900,
+                color:p.played>0?"#fff":"#1a1a1a",
+                fontFamily:"'Barlow Condensed',sans-serif"}}>{p.pts}</div>
+              {p.avg&&<div style={{fontSize:10,color:"#444"}}>{p.avg}/m</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{marginTop:18,...S.card,padding:"11px 13px"}}>
+        <span style={S.label}>Sistema de puntos</span>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"3px 8px",marginBottom:4}}>
+          {["1°→10","2°→8","3°→6","4°→5","5°→4","6°→3","7-12°→2","Long Drive +1","Best Approach +1"].map(s=>(
+            <span key={s} style={{fontSize:11,color:"#444",fontFamily:"'Barlow Condensed',sans-serif"}}>{s}</span>
+          ))}
+        </div>
+        <div style={{fontSize:10,color:"#2a2a2a"}}>
+          Por mes → mejor score neto por jugador · Empate desempata la vuelta
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MONTHS LIST ─────────────────────────────────────────────────────────────
+function MonthsList({scores, onSelect}) {
+  return (
+    <div>
+      <span style={S.label}>Calendario 2026</span>
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+        {MONTHS.map(m=>{
+          const ms=scores.filter(s=>s.monthId===m.id);
+          const has=ms.length>0;
+          const ranked=has?monthlyRanking(m.id,scores):[];
+          const leader=ranked[0]?pById(ranked[0].playerId):null;
+          const uniq=new Set(ms.map(s=>s.playerId)).size;
+          const dates=[...new Set(ms.map(s=>s.dateLabel))];
+          return (
+            <div key={m.id} onClick={()=>onSelect(m)}
+              style={{...S.card,border:`1px solid ${has?"#2a2a2a":"#111"}`,
+                padding:"13px 15px",cursor:"pointer"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:2}}>
+                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,
+                      fontSize:18,color:"#fff",letterSpacing:2}}>{m.label}</span>
+                    {has&&<span style={{background:"#fff",color:"#000",fontSize:9,fontWeight:800,
+                      padding:"2px 7px",borderRadius:20,letterSpacing:1}}>JUGADO</span>}
+                  </div>
+                  {has
+                    ? <div style={{fontSize:11,color:"#555"}}>
+                        {dates.length} fecha{dates.length>1?"s":""} · {uniq} jugador{uniq!==1?"es":""}
+                        {leader&&<span> · 🥇 {leader.name.split(" ")[0]}</span>}
+                      </div>
+                    : <div style={{fontSize:11,color:"#333"}}>Sin scores cargados</div>
+                  }
+                </div>
+                <div style={{fontSize:20,opacity:has?1:0.18}}>⛳</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── SCORECARD WIZARD ────────────────────────────────────────────────────────
+function ScorecardWizard({monthInfo, scores, onSave, onBack}) {
+  const [step,     setStep]     = useState(1);
+  const [player,   setPlayer]   = useState(null);
+  const [course,   setCourse]   = useState(COURSE_NAMES[0]);
+  const [tee,      setTee]      = useState("Blanco");
+  const [handicap, setHandicap] = useState("");
+  const [dateLabel,setDateLabel]= useState("");
+  const [holes,    setHoles]    = useState(Array(18).fill(""));
+  const [ld,       setLd]       = useState(false);
+  const [ba,       setBa]       = useState(false);
+  const [liveRank, setLiveRank] = useState([]);
+
+  const pars       = COURSES[course]?.pars || Array(18).fill(4);
+  const totalPar   = pars.reduce((a,b)=>a+b,0);
+  const front9Par  = pars.slice(0,9).reduce((a,b)=>a+b,0);
+  const back9Par   = pars.slice(9).reduce((a,b)=>a+b,0);
+  const hcp        = parseInt(handicap)||0;
+  const grossFront = holes.slice(0,9).reduce((a,h)=>a+(parseInt(h)||0),0);
+  const grossBack  = holes.slice(9).reduce((a,h)=>a+(parseInt(h)||0),0);
+  const grossTotal = grossFront+grossBack;
+  const holesPlayed= holes.filter(h=>h!=="").length;
+
+  useEffect(()=>{
+    if (!player||holesPlayed===0) return;
+    const tmp=[
+      ...scores.filter(s=>s.monthId===monthInfo.id),
+      { id:"__live__", monthId:monthInfo.id, dateLabel:"Live",
+        playerId:player.id, netScore:grossTotal-hcp,
+        back9:grossBack, longDrive:ld, bestApproach:ba }
+    ];
+    setLiveRank(rankBest(bestScorePerPlayer(tmp)));
+  },[holes,ld,ba]);
+
+  const holeColor = (v,par) => {
+    if (!v) return "#0f0f0f";
+    const d=v-par;
+    if (d<=-2) return "#78350f";
+    if (d===-1) return "#14532d";
+    if (d===0)  return "#1e3a5f";
+    if (d===1)  return "#7c2d12";
+    return "#450a0a";
+  };
+
+  function finishRound() {
+    onSave({
+      id:newId(), monthId:monthInfo.id,
+      dateLabel:dateLabel||"Sin fecha",
+      playerId:player.id, netScore:grossTotal-hcp,
+      back9:grossBack, longDrive:ld, bestApproach:ba,
+      course, tee, handicap:hcp,
+      holes:holes.map(h=>parseInt(h)||0),
+    });
+    setStep(3);
+  }
+
+  // STEP 1
+  if (step===1) return (
+    <div>
+      <BackBtn onClick={onBack}/>
+      <div style={{marginBottom:18}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:900,
+          color:"#fff",letterSpacing:3}}>{monthInfo.label.toUpperCase()}</div>
+        <div style={{fontSize:12,color:"#555"}}>Cargar tarjeta online</div>
+      </div>
+
+      <div style={{marginBottom:16}}>
+        <span style={S.label}>1 · Jugador</span>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {PLAYERS.map(p=>(
+            <button key={p.id} onClick={()=>setPlayer(p)} style={{
+              background:player?.id===p.id?"#fff":"#0d0d0d",
+              border:`1px solid ${player?.id===p.id?"#fff":"#1e1e1e"}`,
+              color:player?.id===p.id?"#000":"#888",
+              padding:"6px 13px",borderRadius:5,cursor:"pointer",
+              fontSize:12,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700}}>
+              {p.name.split(" ")[0]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{marginBottom:16}}>
+        <span style={S.label}>2 · Fecha</span>
+        <input value={dateLabel} onChange={e=>setDateLabel(e.target.value)}
+          placeholder="ej. 12 Abr" style={S.input}/>
+      </div>
+
+      <div style={{marginBottom:16}}>
+        <span style={S.label}>3 · Campo de juego</span>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {COURSE_NAMES.map(c=>(
+            <button key={c} onClick={()=>setCourse(c)} style={{
+              background:course===c?"#fff":"#0d0d0d",
+              border:`1px solid ${course===c?"#fff":"#1e1e1e"}`,
+              color:course===c?"#000":"#888",
+              padding:"6px 12px",borderRadius:5,cursor:"pointer",
+              fontSize:12,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700}}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{marginBottom:16}}>
+        <span style={S.label}>4 · Circuito / Salida</span>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+          {TEES.map(t=>{
+            const active=tee===t;
+            const tc=TEE_COLORS[t];
+            return (
+              <button key={t} onClick={()=>setTee(t)} style={{
+                background:active?tc:"#0d0d0d",
+                border:`2px solid ${active?tc:"#1e1e1e"}`,
+                color:active?(t==="Blanco"||t==="Amarillo"?"#000":"#fff"):"#666",
+                padding:"10px 4px",borderRadius:6,cursor:"pointer",
+                fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:12,
+                display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <div style={{width:14,height:14,borderRadius:"50%",
+                  background:active?(t==="Blanco"?"#000":tc):"#333",
+                  border:`2px solid ${tc}`}}/>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{marginBottom:22}}>
+        <span style={S.label}>5 · Handicap de juego</span>
+        <input type="number" inputMode="numeric" value={handicap}
+          onChange={e=>setHandicap(e.target.value)} placeholder="ej. 14"
+          style={{...S.input,fontSize:28,fontWeight:900,textAlign:"center",padding:"14px"}}/>
+      </div>
+
+      <PrimaryBtn disabled={!player||!handicap||!dateLabel} onClick={()=>setStep(2)}>
+        INICIAR TARJETA →
+      </PrimaryBtn>
+    </div>
+  );
+
+  // STEP 2
+  if (step===2) return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <BackBtn onClick={()=>setStep(1)}/>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:700,color:"#fff"}}>
+            {player?.name}
+          </div>
+          <div style={{fontSize:10,color:"#555"}}>{course} · Tee {tee} · HCP {hcp}</div>
+        </div>
+      </div>
+
+      <div style={{...S.card,padding:"10px 14px",marginBottom:12,
+        display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
+        {[
+          ["FRONT", grossFront, front9Par],
+          ["BACK",  grossBack,  back9Par],
+          ["TOTAL", grossTotal, totalPar],
+          ["NETO",  grossTotal?grossTotal-hcp:null, null],
+        ].map(([label,val,par])=>{
+          const diff = par!=null&&val ? val-par : null;
+          const col  = !val ? "#333"
+            : diff===null ? "#fff"
+            : diff===0    ? "#60a5fa"
+            : diff<0      ? "#4ade80"
+            : "#f87171";
+          return (
+            <div key={label} style={{textAlign:"center"}}>
+              <div style={{fontSize:8,color:"#444",letterSpacing:2,marginBottom:2}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:900,color:col,
+                fontFamily:"'Barlow Condensed',sans-serif",lineHeight:1}}>{val||"—"}</div>
+              {diff!=null&&val>0&&(
+                <div style={{fontSize:9,color:diff>0?"#f87171":diff<0?"#4ade80":"#555"}}>
+                  {diff>0?"+":""}{diff||"E"}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {[0,1].map(half=>(
+        <div key={half} style={{marginBottom:10}}>
+          <div style={{fontSize:9,color:"#333",letterSpacing:2,marginBottom:5}}>
+            {half===0?"FRENTE  1-9":"VUELTA  10-18"}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:3}}>
+            {Array(9).fill(null).map((_,j)=>{
+              const i=half*9+j;
+              const v=parseInt(holes[i])||0;
+              const par=pars[i];
+              return (
+                <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                  <div style={{fontSize:7,color:"#333"}}>{i+1}</div>
+                  <div style={{fontSize:7,color:"#222"}}>P{par}</div>
+                  <input
+                    type="number" inputMode="numeric" min={1} max={15}
+                    value={holes[i]}
+                    onChange={e=>{ const h=[...holes]; h[i]=e.target.value; setHoles(h); }}
+                    style={{width:"100%",height:36,textAlign:"center",
+                      background:holeColor(v,par),
+                      border:`1px solid ${v?"transparent":"#1a1a1a"}`,
+                      color:"#fff",borderRadius:4,fontSize:15,fontWeight:800,
+                      outline:"none",fontFamily:"'Barlow Condensed',sans-serif"}}
+                  />
+                  <div style={{fontSize:7,minHeight:9,
+                    color:v?(v-par<0?"#4ade80":v-par>0?"#f87171":"#555"):"transparent"}}>
+                    {v?(v-par<0?"▼":"▲"):"·"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:12,
+            marginTop:3,paddingTop:3,borderTop:"1px solid #111"}}>
+            <span style={{fontSize:10,color:"#333"}}>Par {half===0?front9Par:back9Par}</span>
+            <span style={{fontSize:10,color:"#777",fontWeight:700}}>
+              {half===0?(grossFront||"—"):(grossBack||"—")}
+            </span>
+          </div>
+        </div>
+      ))}
+
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {[[ld,setLd,"🏌️ Long Drive"],[ba,setBa,"🎯 Best Approach"]].map(([v,s,lbl],i)=>(
+          <button key={i} onClick={()=>s(!v)} style={{
+            flex:1,background:v?"#fff":"#0d0d0d",
+            border:`1px solid ${v?"#fff":"#1e1e1e"}`,color:v?"#000":"#555",
+            padding:"9px 0",borderRadius:5,cursor:"pointer",fontSize:12,fontWeight:700,
+            fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>{lbl}</button>
+        ))}
+      </div>
+
+      {liveRank.length>0&&(
+        <div style={{...S.card,padding:"10px 12px",marginBottom:14}}>
+          <span style={S.label}>Ranking en vivo — {monthInfo.label}</span>
+          {liveRank.slice(0,8).map(r=>{
+            const p=pById(r.playerId);
+            const isMe=r.playerId===player?.id;
+            return (
+              <div key={r.playerId} style={{display:"flex",alignItems:"center",gap:8,
+                padding:"4px 6px",borderRadius:4,
+                background:isMe?"#ffffff08":"transparent"}}>
+                <Pos n={r.position} size={19}/>
+                <span style={{flex:1,fontSize:12,color:isMe?"#fff":"#555",
+                  fontWeight:isMe?700:400,fontFamily:"'Barlow Condensed',sans-serif"}}>
+                  {p?.name.split(" ")[0]}{isMe?" ← vos":""}
+                </span>
+                <span style={{fontSize:11,color:"#444"}}>Neto {r.netScore}</span>
+                <span style={{fontSize:13,fontWeight:900,
+                  color:isMe?"#fff":"#444",fontFamily:"'Barlow Condensed',sans-serif",
+                  minWidth:22,textAlign:"right"}}>{r.points}p</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <PrimaryBtn disabled={holesPlayed<18} onClick={finishRound}>
+        {holesPlayed<18?`COMPLETÁ LOS ${18-holesPlayed} HOYOS RESTANTES`:"CERRAR TARJETA ✓"}
+      </PrimaryBtn>
+    </div>
+  );
+
+  // STEP 3
+  return (
+    <div style={{textAlign:"center",padding:"48px 16px"}}>
+      <div style={{fontSize:56,marginBottom:16}}>✓</div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:26,fontWeight:900,
+        color:"#fff",letterSpacing:3,marginBottom:6}}>TARJETA GUARDADA</div>
+      <div style={{fontSize:14,color:"#555",marginBottom:4}}>{player?.name}</div>
+      <div style={{fontSize:36,fontWeight:900,color:"#fff",
+        fontFamily:"'Barlow Condensed',sans-serif",margin:"16px 0 4px"}}>
+        {grossTotal-hcp}
+      </div>
+      <div style={{fontSize:12,color:"#444",marginBottom:28}}>Score neto · Bruto {grossTotal}</div>
+      <button onClick={onBack} style={{background:"#111",border:"1px solid #222",color:"#fff",
+        padding:"12px 24px",borderRadius:6,cursor:"pointer",fontSize:14,fontWeight:700,
+        fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:2,width:"100%"}}>
+        VOLVER AL MES
+      </button>
+    </div>
+  );
+}
+
+// ─── MONTH DETAIL ─────────────────────────────────────────────────────────────
+function MonthDetail({monthInfo, scores, onSave, onDeleteScore, onBack}) {
+  const [view,setView]=useState("results");
+  const ms     = scores.filter(s=>s.monthId===monthInfo.id);
+  const dates  = [...new Set(ms.map(s=>s.dateLabel))].sort();
+  const ranked = monthlyRanking(monthInfo.id, scores);
+
+  if (view==="card") return (
+    <ScorecardWizard monthInfo={monthInfo} scores={scores}
+      onSave={s=>{ onSave(s); setView("results"); }}
+      onBack={()=>setView("results")}/>
+  );
+
+  return (
+    <div>
+      <BackBtn onClick={onBack}/>
+      <div style={{marginBottom:16}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:900,
+          color:"#fff",letterSpacing:3}}>{monthInfo.label.toUpperCase()}</div>
+        <div style={{fontSize:11,color:"#555",marginTop:2}}>
+          Mejor score neto de cada jugador del mes
+        </div>
+      </div>
+
+      <button onClick={()=>setView("card")} style={{width:"100%",background:"#fff",
+        border:"none",color:"#000",padding:"13px",borderRadius:7,cursor:"pointer",
+        fontSize:14,fontWeight:900,fontFamily:"'Barlow Condensed',sans-serif",
+        letterSpacing:2,marginBottom:18}}>
+        + CARGAR TARJETA ONLINE
+      </button>
+
+      {ranked.length>0&&(
+        <div style={{marginBottom:20}}>
+          <span style={S.label}>Ranking {monthInfo.label}</span>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {ranked.map(r=>{
+              const p=pById(r.playerId);
+              if (!p) return null;
+              return (
+                <div key={r.playerId} style={{...S.card,padding:"9px 12px",
+                  display:"flex",alignItems:"center",gap:9}}>
+                  <Pos n={r.position} size={23}/>
+                  <Av av={p.av} size={29}/>
+                  <div style={{flex:1}}>
+                    <div style={{color:"#fff",fontWeight:700,fontSize:13,
+                      fontFamily:"'Barlow Condensed',sans-serif"}}>{p.name}</div>
+                    <div style={{fontSize:10,color:"#444"}}>
+                      Neto {r.netScore}
+                      {r.back9!=null&&` · Vta ${r.back9}`}
+                      {r.course&&` · ${r.course}`}
+                      {r.tee&&` · ${r.tee}`}
+                      {r.longDrive&&" · 🏌️"}
+                      {r.bestApproach&&" · 🎯"}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:21,fontWeight:900,color:"#fff",
+                      fontFamily:"'Barlow Condensed',sans-serif"}}>{r.points}</span>
+                    <span style={{fontSize:10,color:"#444",marginLeft:2}}>pts</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {dates.length>0&&(
+        <div>
+          <span style={S.label}>Todos los scores del mes</span>
+          {dates.map(dl=>{
+            const ds=ms.filter(s=>s.dateLabel===dl).sort((a,b)=>a.netScore-b.netScore);
+            return (
+              <div key={dl} style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:"#444",fontFamily:"'Barlow Condensed',sans-serif",
+                  letterSpacing:1,marginBottom:5,paddingBottom:3,borderBottom:"1px solid #111"}}>
+                  {dl}
+                </div>
+                {ds.map(s=>{
+                  const p=pById(s.playerId);
+                  const isBest=ranked.some(r=>r.playerId===s.playerId&&r.netScore===s.netScore);
+                  return (
+                    <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,
+                      padding:"5px 0",opacity:isBest?1:0.4}}>
+                      <Av av={p?.av||"?"} size={22}/>
+                      <div style={{flex:1,fontSize:12,
+                        color:isBest?"#ccc":"#555",fontFamily:"'Barlow Condensed',sans-serif"}}>
+                        {p?.name.split(" ")[0]} · Neto {s.netScore}
+                        {s.back9!=null&&` (Vta ${s.back9})`}
+                        {s.course&&` · ${s.course}`}
+                        {s.longDrive&&" 🏌️"}{s.bestApproach&&" 🎯"}
+                        {isBest&&<span style={{color:"#888",marginLeft:4,fontSize:10}}>★</span>}
+                      </div>
+                      <button onClick={()=>onDeleteScore(s.id)} style={{background:"none",
+                        border:"none",color:"#2a2a2a",cursor:"pointer",fontSize:14,padding:"0 2px"}}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {ms.length===0&&(
+        <div style={{textAlign:"center",padding:"32px 0",color:"#333",fontSize:13}}>
+          Sin scores cargados para este mes
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function StatsTab({scores}) {
+  const [sel,setSel]=useState("p02");
+  const player=PLAYERS.find(p=>p.id===sel);
+  const perMonth=MONTHS.map(m=>{
+    const ranked=monthlyRanking(m.id,scores);
+    const mine=ranked.find(r=>r.playerId===sel);
+    if(!mine) return null;
+    return {...m,position:mine.position,points:mine.points,netScore:mine.netScore};
+  }).filter(Boolean);
+  const totalPts=perMonth.reduce((a,b)=>a+b.points,0);
+  const bestPos=perMonth.length?Math.min(...perMonth.map(d=>d.position)):null;
+  const avgNet=perMonth.length?(perMonth.reduce((a,b)=>a+b.netScore,0)/perMonth.length).toFixed(1):null;
+  const tots=computeTotals(scores);
+  const myRank=tots.findIndex(p=>p.id===sel)+1;
+  const maxPts=tots[0]?.pts||1;
+
+  return (
+    <div>
+      <span style={S.label}>Estadísticas</span>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:18}}>
+        {PLAYERS.map(p=>(
+          <button key={p.id} onClick={()=>setSel(p.id)} style={{
+            background:sel===p.id?"#fff":"#0a0a0a",
+            border:`1px solid ${sel===p.id?"#fff":"#1a1a1a"}`,
+            color:sel===p.id?"#000":"#666",padding:"4px 11px",borderRadius:4,cursor:"pointer",
+            fontSize:12,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700}}>
+            {p.name.split(" ")[0]}
+          </button>
+        ))}
+      </div>
+
+      <div style={{...S.card,padding:14,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:14}}>
+          <Av av={player.av} size={46}/>
+          <div>
+            <div style={{fontWeight:900,color:"#fff",fontSize:17,
+              fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>{player.name}</div>
+            <div style={{color:"#444",fontSize:11}}>Mat. {player.mat}</div>
+            <div style={{color:"#bbb",fontSize:13,fontWeight:700,
+              fontFamily:"'Barlow Condensed',sans-serif",marginTop:2}}>#{myRank} del campeonato</div>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7}}>
+          {[["PUNTOS",totalPts,"#fff"],["MESES",perMonth.length,"#ccc"],
+            ["MEJOR",bestPos?`${bestPos}°`:"—","#FFD700"],["NET AVG",avgNet||"—","#aaa"]].map(([l,v,c])=>(
+            <div key={l} style={{background:"#111",borderRadius:6,padding:"9px 5px",textAlign:"center"}}>
+              <div style={{fontSize:8,color:"#333",letterSpacing:2,marginBottom:3}}>{l}</div>
+              <div style={{fontSize:19,fontWeight:900,color:c,
+                fontFamily:"'Barlow Condensed',sans-serif"}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {perMonth.length>0&&(
+        <div style={{...S.card,padding:13,marginBottom:12}}>
+          <span style={S.label}>Puntos por mes</span>
+          <div style={{display:"flex",alignItems:"flex-end",gap:5,height:68}}>
+            {MONTHS.map(m=>{
+              const pm=perMonth.find(x=>x.id===m.id);
+              const h=pm?Math.max((pm.points/11)*56,5):0;
+              return (
+                <div key={m.id} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  {pm&&<div style={{fontSize:9,color:"#ccc",fontWeight:700}}>{pm.points}</div>}
+                  <div style={{width:"100%",height:h||4,background:pm?"#fff":"#111",borderRadius:2}}/>
+                  <div style={{fontSize:8,color:"#333"}}>{m.label.slice(0,3)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {perMonth.length>0&&(
+        <div style={{...S.card,padding:13,marginBottom:12}}>
+          <span style={S.label}>Detalle</span>
+          {perMonth.map(m=>(
+            <div key={m.id} style={{display:"flex",justifyContent:"space-between",
+              alignItems:"center",padding:"6px 0",borderBottom:"1px solid #0d0d0d"}}>
+              <span style={{fontSize:13,color:"#ccc",fontFamily:"'Barlow Condensed',sans-serif",
+                fontWeight:600}}>{m.label}</span>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <span style={{fontSize:11,color:"#444"}}>Neto {m.netScore}</span>
+                <Pos n={m.position} size={20}/>
+                <span style={{fontSize:14,fontWeight:900,color:"#fff",
+                  fontFamily:"'Barlow Condensed',sans-serif",minWidth:22,textAlign:"right"}}>
+                  {m.points}p
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{...S.card,padding:13}}>
+        <span style={S.label}>Comparativa</span>
+        {tots.map((p,i)=>{
+          const isMe=p.id===sel;
+          return (
+            <div key={p.id} style={{marginBottom:7}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                <span style={{fontSize:12,color:isMe?"#fff":"#444",
+                  fontWeight:isMe?700:400,fontFamily:"'Barlow Condensed',sans-serif"}}>
+                  {i+1}. {p.name.split(" ")[0]} {isMe?"← vos":""}
+                </span>
+                <span style={{fontSize:12,color:isMe?"#fff":"#333",fontWeight:700}}>{p.pts} pts</span>
+              </div>
+              <div style={{height:3,background:"#111",borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${(p.pts/maxPts)*100}%`,
+                  background:isMe?"#fff":"#1e1e1e",borderRadius:2}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── PLAYERS ─────────────────────────────────────────────────────────────────
+function PlayersTab() {
+  return (
+    <div>
+      <span style={S.label}>Participantes</span>
+      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+        {PLAYERS.map((p,i)=>(
+          <div key={p.id} style={{...S.card,padding:"10px 13px",display:"flex",alignItems:"center",gap:11}}>
+            <div style={{width:22,textAlign:"center",fontSize:12,color:"#2a2a2a"}}>{i+1}</div>
+            <Av av={p.av} size={32}/>
+            <div>
+              <div style={{fontWeight:700,color:"#fff",fontSize:14,
+                fontFamily:"'Barlow Condensed',sans-serif"}}>{p.name}</div>
+              <div style={{fontSize:10,color:"#444"}}>Mat. {p.mat}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [tab,      setTab]      = useState("leaderboard");
+  const [scores,   setScores]   = useState(null);
+  const [selMonth, setSelMonth] = useState(null);
+
+  useEffect(()=>{
+    setScores(loadScores() ?? SEED_SCORES);
+  },[]);
+
+  const saveScore = useCallback(s=>{
+    setScores(prev=>{ const n=[...prev,s]; persistScores(n); return n; });
+  },[]);
+
+  const deleteScore = useCallback(id=>{
+    setScores(prev=>{ const n=prev.filter(s=>s.id!==id); persistScores(n); return n; });
+  },[]);
+
+  if (!scores) return (
+    <div style={{background:"#000",height:"100vh",display:"flex",
+      alignItems:"center",justifyContent:"center"}}>
+      <LogoSVG size={56}/>
+    </div>
+  );
+
+  const TABS=[
+    {id:"leaderboard",icon:"🏆",label:"Ranking"},
+    {id:"months",     icon:"📅",label:"Meses"},
+    {id:"stats",      icon:"📊",label:"Stats"},
+    {id:"players",    icon:"👥",label:"Jugadores"},
+  ];
+
+  return (
+    <div style={{background:"#000",minHeight:"100vh",maxWidth:480,margin:"0 auto",
+      fontFamily:"'Barlow Condensed',sans-serif",color:"#fff"}}>
+      <div style={{background:"#000",borderBottom:"1px solid #111",padding:"11px 16px 9px",
+        position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",gap:11}}>
+        <LogoSVG size={30}/>
+        <div>
+          <div style={{fontSize:17,fontWeight:900,letterSpacing:4,color:"#fff",lineHeight:1,
+            fontFamily:"'Barlow Condensed',sans-serif"}}>COPA MACI</div>
+          <div style={{fontSize:8,color:"#333",letterSpacing:3}}>TEMPORADA 2026</div>
+        </div>
+      </div>
+
+      <div style={{padding:"16px 13px 88px"}}>
+        {tab==="leaderboard" && <Leaderboard scores={scores}/>}
+        {tab==="months"&&!selMonth && <MonthsList scores={scores} onSelect={m=>setSelMonth(m)}/>}
+        {tab==="months"&& selMonth && (
+          <MonthDetail monthInfo={selMonth} scores={scores}
+            onSave={saveScore} onDeleteScore={deleteScore}
+            onBack={()=>setSelMonth(null)}/>
+        )}
+        {tab==="stats"   && <StatsTab scores={scores}/>}
+        {tab==="players" && <PlayersTab/>}
+      </div>
+
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",
+        width:"100%",maxWidth:480,background:"#000",borderTop:"1px solid #111",
+        display:"flex",zIndex:20}}>
+        {TABS.map(t=>{
+          const active=tab===t.id;
+          return (
+            <button key={t.id}
+              onClick={()=>{ setTab(t.id); if(t.id!=="months") setSelMonth(null); }}
+              style={{flex:1,background:"none",border:"none",
+                color:active?"#fff":"#2e2e2e",padding:"10px 4px 12px",cursor:"pointer",
+                fontSize:10,fontWeight:700,letterSpacing:1,
+                borderTop:`2px solid ${active?"#fff":"transparent"}`,
+                fontFamily:"'Barlow Condensed',sans-serif"}}>
+              <div style={{fontSize:17,marginBottom:1}}>{t.icon}</div>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
