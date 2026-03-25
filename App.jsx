@@ -35,7 +35,7 @@ const PTS_TABLE = [10, 8, 6, 5, 4, 3, 2, 2, 2, 2, 2];
 
 // ─── APP PRINCIPAL ───────────────────────────
 export default function App() {
-  const [view, setView] = useState("home"); // home, setup, wizard, ranking_anual
+  const [view, setView] = useState("home"); // home, setup, wizard, ranking_gross
   const [scores, setScores] = useState([]);
   const [setup, setSetup] = useState({ date: new Date().toISOString().split('T')[0], playerId: "", hcp: "", course: "Hacoaj", tee: "Blanco" });
 
@@ -48,7 +48,7 @@ export default function App() {
   }, []);
 
   // Lógica: Mejor neto mensual -> Puntos Copa
-  const calculatePoints = () => {
+  const calculateCopaPoints = () => {
     const pts = {}; PLAYERS.forEach(p => pts[p.id] = 0);
     const months = [...new Set(scores.map(s => s.date.substring(0, 7)))];
     months.forEach(m => {
@@ -62,7 +62,16 @@ export default function App() {
     return pts;
   };
 
-  const currentPoints = calculatePoints();
+  // Lógica: Ranking Gross (Mejor score de la temporada)
+  const getGrossRanking = () => {
+    return PLAYERS.map(p => {
+      const pScores = scores.filter(s => s.playerId === p.id);
+      const bestG = pScores.length > 0 ? Math.min(...pScores.map(s => s.gross)) : "-";
+      return { ...p, bestG };
+    }).sort((a, b) => (a.bestG === "-" ? 1 : b.bestG === "-" ? -1 : a.bestG - b.bestG));
+  };
+
+  const points = calculateCopaPoints();
 
   return (
     <div style={{ maxWidth: 500, margin: "0 auto", padding: 20, backgroundColor: "#000", minHeight: "100vh", color: "white", fontFamily: "'Barlow Condensed', sans-serif" }}>
@@ -73,13 +82,13 @@ export default function App() {
           <LogoSVG size={100} />
         </div>
         <h1 style={{ letterSpacing: 8, margin: 0, fontSize: 32 }}>COPA MACI</h1>
-        <p style={{ color: "#444", fontSize: 11, letterSpacing: 4 }}>THE GOLF CHAMPIONSHIP</p>
+        <p style={{ color: "#444", fontSize: 11, letterSpacing: 4 }}>THE GOLF CHAMPIONSHIP 2026</p>
       </header>
 
       {view === "home" && (
         <>
           <section style={{ marginBottom: 25 }}>
-            <span style={S.label}>Field de Jugadores / Puntos Copa</span>
+            <span style={S.label}>FIELD DE JUGADORES / PUNTOS COPA (NETO)</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {PLAYERS.map(p => (
                 <div key={p.id} style={S.card}>
@@ -89,7 +98,7 @@ export default function App() {
                     <div style={{ fontSize: 10, color: "#555" }}>MAT: {p.mat}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 26, fontWeight: 900 }}>{currentPoints[p.id]}</div>
+                    <div style={{ fontSize: 26, fontWeight: 900 }}>{points[p.id]}</div>
                     <div style={{ fontSize: 9, color: "#444" }}>PTS</div>
                   </div>
                 </div>
@@ -98,14 +107,14 @@ export default function App() {
           </section>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <button onClick={() => setView("setup")} style={S.btnPrimary}>+ NUEVO TORNEO / JUGAR FECHA</button>
-            <button onClick={() => setView("ranking_anual")} style={S.btnSecondary}>VER RANKING ANUAL ACUMULADO</button>
+            <button onClick={() => setView("setup")} style={S.btnPrimary}>+ NUEVO TORNEO / CARGAR TARJETA</button>
+            <button onClick={() => setView("ranking_gross")} style={S.btnSecondary}>VER RANKING MEJOR GROSS ANUAL</button>
           </div>
         </>
       )}
 
       {view === "setup" && (
-        <div style={{ animation: "fadeIn 0.3s" }}>
+        <div>
           <button onClick={() => setView("home")} style={S.backBtn}>← CANCELAR</button>
           <h2 style={{ letterSpacing: 2, marginBottom: 25 }}>CONFIGURAR PARTIDA</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
@@ -128,7 +137,7 @@ export default function App() {
                 </select>
               </label>
             </div>
-            <button onClick={() => setView("wizard")} disabled={!setup.playerId} style={S.btnPrimary}>INICIAR TARJETA ONLINE</button>
+            <button onClick={() => setView("wizard")} disabled={!setup.playerId} style={S.btnPrimary}>CARGAR TARJETA ONLINE</button>
           </div>
         </div>
       )}
@@ -137,15 +146,17 @@ export default function App() {
         <Wizard setup={setup} allScores={scores} onSave={async (d) => { await addDoc(collection(db, "scores"), {...d, createdAt: new Date()}); setView("home"); }} onBack={() => setView("home")} />
       )}
 
-      {view === "ranking_anual" && (
+      {view === "ranking_gross" && (
         <div>
           <button onClick={() => setView("home")} style={S.backBtn}>← VOLVER AL FIELD</button>
-          <h2 style={{ letterSpacing: 2, marginBottom: 20 }}>RANKING ANUAL ACUMULADO</h2>
-          {PLAYERS.map((p, i) => (
-            <div key={p.id} style={{ ...S.card, opacity: currentPoints[p.id] > 0 ? 1 : 0.4 }}>
+          <h2 style={{ letterSpacing: 2, marginBottom: 20 }}>RANKING MEJOR GROSS ANUAL</h2>
+          <p style={{ color: "#444", fontSize: 11, marginBottom: 15 }}>Ranking basado en el mejor score sin hándicap (Gross) del año.</p>
+          {getGrossRanking().map((p, i) => (
+            <div key={p.id} style={{ ...S.card, marginBottom: 8, border: p.bestG !== "-" ? "1px solid #00ff8844" : "1px solid #1a1a1a" }}>
               <span style={{ fontWeight: 900, color: "#444", width: 25 }}>{i+1}</span>
               <span style={{ flex: 1, fontWeight: 700 }}>{p.name.toUpperCase()}</span>
-              <span style={{ fontWeight: 900, fontSize: 20 }}>{currentPoints[p.id]} PTS</span>
+              <span style={{ fontWeight: 900, fontSize: 22, color: "#00ff88" }}>{p.bestG}</span>
+              <span style={{ fontSize: 9, color: "#444", marginLeft: 5 }}>G</span>
             </div>
           ))}
         </div>
@@ -162,7 +173,7 @@ function Wizard({ setup, allScores, onSave, onBack }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, alignItems: "center" }}>
-        <button onClick={onBack} style={S.backBtn}>SALIR</button>
+        <button onClick={onBack} style={S.backBtn}>CANCELAR</button>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 22, fontWeight: 900, color: "#00ff88" }}>GROSS: {gross}</div>
           <div style={{ fontSize: 14, color: "#FFD700" }}>NETO: {net}</div>
@@ -186,7 +197,6 @@ function Wizard({ setup, allScores, onSave, onBack }) {
             <span style={{ fontWeight: 900, color: "#FFD700" }}>{s.netScore} NETO</span>
           </div>
         ))}
-        {allScores.filter(s => s.date === setup.date).length === 0 && <div style={{fontSize: 12, color: "#333", marginTop: 5}}>Nadie más está cargando hoy.</div>}
       </div>
       <button onClick={() => onSave({ ...setup, holes, gross, netScore: net })} style={S.btnPrimary}>GUARDAR Y CERRAR TARJETA</button>
     </div>
