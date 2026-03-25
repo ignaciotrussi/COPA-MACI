@@ -33,71 +33,63 @@ const PLAYERS = [
 const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
 const PTS_TABLE = [10, 8, 6, 5, 4, 3, 2, 2, 2, 2, 2];
 
-// ─── COMPONENTE PRINCIPAL ────────────────────
+// ─── APP PRINCIPAL ───────────────────────────
 export default function App() {
-  const [view, setView] = useState("home"); // home, setup, wizard, rankingGross
+  const [view, setView] = useState("home"); // home, setup, wizard, ranking_anual
   const [scores, setScores] = useState([]);
-  const [setup, setSetup] = useState({ playerId: "p01", course: "Hacoaj", tee: "Blanco", hcp: "", date: new Date().toISOString().split('T')[0] });
+  const [setup, setSetup] = useState({ date: new Date().toISOString().split('T')[0], playerId: "", hcp: "", course: "Hacoaj", tee: "Blanco" });
 
   useEffect(() => {
     const q = query(collection(db, "scores"), orderBy("date", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setScores(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setScores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsubscribe();
   }, []);
 
-  // --- LÓGICA DE CÁLCULO DE PUNTOS (Ranking Mensual) ---
+  // Lógica: Mejor neto mensual -> Puntos Copa
   const calculatePoints = () => {
-    const playerPoints = {};
-    PLAYERS.forEach(p => playerPoints[p.id] = 0);
-
-    // Agrupar por Mes
+    const pts = {}; PLAYERS.forEach(p => pts[p.id] = 0);
     const months = [...new Set(scores.map(s => s.date.substring(0, 7)))];
-    
     months.forEach(m => {
-      const bestNetos = [];
+      const bests = [];
       PLAYERS.forEach(p => {
-        const pMonthScores = scores.filter(s => s.playerId === p.id && s.date.startsWith(m));
-        if (pMonthScores.length > 0) {
-          const bestNeto = Math.min(...pMonthScores.map(s => s.netScore));
-          bestNetos.push({ playerId: p.id, neto: bestNeto });
-        }
+        const pScores = scores.filter(s => s.playerId === p.id && s.date.startsWith(m));
+        if (pScores.length > 0) bests.push({ id: p.id, neto: Math.min(...pScores.map(s => s.netScore)) });
       });
-      // Ordenar netos del mes y asignar puntos
-      bestNetos.sort((a, b) => a.neto - b.neto).forEach((item, idx) => {
-        playerPoints[item.playerId] += PTS_TABLE[idx] || 1;
-      });
+      bests.sort((a,b) => a.neto - b.neto).forEach((item, idx) => { pts[item.id] += PTS_TABLE[idx] || 1; });
     });
-    return playerPoints;
+    return pts;
   };
 
-  const points = calculatePoints();
+  const currentPoints = calculatePoints();
 
   return (
     <div style={{ maxWidth: 500, margin: "0 auto", padding: 20, backgroundColor: "#000", minHeight: "100vh", color: "white", fontFamily: "'Barlow Condensed', sans-serif" }}>
       
-      {/* ─── FRONTING PRINCIPAL ─── */}
+      {/* LOGO CM OFICIAL */}
+      <header style={{ textAlign: "center", marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 15 }}>
+          <LogoSVG size={100} />
+        </div>
+        <h1 style={{ letterSpacing: 8, margin: 0, fontSize: 32 }}>COPA MACI</h1>
+        <p style={{ color: "#444", fontSize: 11, letterSpacing: 4 }}>THE GOLF CHAMPIONSHIP</p>
+      </header>
+
       {view === "home" && (
         <>
-          <header style={{ textAlign: "center", marginBottom: 30 }}>
-            <LogoSVG size={80} />
-            <h1 style={{ letterSpacing: 6, margin: "10px 0 0" }}>COPA MACI</h1>
-            <p style={{ color: "#444", fontSize: 10 }}>THE GOLF CHAMPIONSHIP 2026</p>
-          </header>
-
           <section style={{ marginBottom: 25 }}>
-            <span style={S.label}>Field de Jugadores / Ranking</span>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <span style={S.label}>Field de Jugadores / Puntos Copa</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {PLAYERS.map(p => (
-                <div key={p.id} style={S.cardPlayer}>
+                <div key={p.id} style={S.card}>
                   <div style={S.avatar}>{p.av}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
-                    <div style={{ fontSize: 10, color: "#444" }}>MAT: {p.mat}</div>
+                    <div style={{ fontWeight: 800, fontSize: 17 }}>{p.name.toUpperCase()}</div>
+                    <div style={{ fontSize: 10, color: "#555" }}>MAT: {p.mat}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>{points[p.id]}</div>
+                    <div style={{ fontSize: 26, fontWeight: 900 }}>{currentPoints[p.id]}</div>
                     <div style={{ fontSize: 9, color: "#444" }}>PTS</div>
                   </div>
                 </div>
@@ -105,141 +97,118 @@ export default function App() {
             </div>
           </section>
 
-          <section style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-            <button onClick={() => setView("setup")} style={S.btnPrimary}>JUGAR NUEVO TORNEO / CARGAR TARJETA</button>
-            <button onClick={() => setView("rankingGross")} style={S.btnSecondary}>VER RANKING MEJOR GROSS</button>
-          </section>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <button onClick={() => setView("setup")} style={S.btnPrimary}>+ NUEVO TORNEO / JUGAR FECHA</button>
+            <button onClick={() => setView("ranking_anual")} style={S.btnSecondary}>VER RANKING ANUAL ACUMULADO</button>
+          </div>
         </>
       )}
 
-      {/* ─── SETUP: CONFIGURAR SALIDA ─── */}
       {view === "setup" && (
-        <SetupView setup={setup} setSetup={setSetup} onNext={() => setView("wizard")} onBack={() => setView("home")} />
-      )}
-
-      {/* ─── WIZARD: CARGA ONLINE ─── */}
-      {view === "wizard" && (
-        <ScorecardOnline 
-          setup={setup} 
-          allScores={scores}
-          onSave={async (d) => { await addDoc(collection(db, "scores"), {...d, createdAt: new Date()}); setView("home"); }} 
-        />
-      )}
-
-      {/* ─── RANKING GROSS ─── */}
-      {view === "rankingGross" && (
-        <RankingGross scores={scores} onBack={() => setView("home")} />
-      )}
-
-    </div>
-  );
-}
-
-// ─── VISTAS SECUNDARIAS ───
-
-function SetupView({ setup, setSetup, onNext, onBack }) {
-  return (
-    <div>
-      <button onClick={onBack} style={S.back}>← VOLVER</button>
-      <h2 style={{ letterSpacing: 2 }}>NUEVO TORNEO</h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-        <label style={S.label}>FECHA DE JUEGO
-          <input type="date" style={S.input} value={setup.date} onChange={e => setSetup({...setup, date: e.target.value})} />
-        </label>
-        <label style={S.label}>JUGADOR
-          <select style={S.input} value={setup.playerId} onChange={e => setSetup({...setup, playerId: e.target.value})}>
-            {PLAYERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
-        <div style={{ display: "flex", gap: 10 }}>
-          <label style={{ ...S.label, flex: 1 }}>HCP JUEGO
-            <input type="number" style={S.input} placeholder="0" value={setup.hcp} onChange={e => setSetup({...setup, hcp: e.target.value})} />
-          </label>
-          <label style={{ ...S.label, flex: 1 }}>CANCHA
-            <select style={S.input} value={setup.course} onChange={e => setSetup({...setup, course: e.target.value})}>
-              {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
+        <div style={{ animation: "fadeIn 0.3s" }}>
+          <button onClick={() => setView("home")} style={S.backBtn}>← CANCELAR</button>
+          <h2 style={{ letterSpacing: 2, marginBottom: 25 }}>CONFIGURAR PARTIDA</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+            <label style={S.label}>FECHA
+              <input type="date" style={S.input} value={setup.date} onChange={e => setSetup({...setup, date: e.target.value})} />
+            </label>
+            <label style={S.label}>JUGADOR
+              <select style={S.input} onChange={e => setSetup({...setup, playerId: e.target.value})}>
+                <option value="">Elegir de la lista...</option>
+                {PLAYERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <div style={{ display: "flex", gap: 10 }}>
+              <label style={{...S.label, flex:1}}>HCP JUEGO
+                <input type="number" style={S.input} placeholder="0" onChange={e => setSetup({...setup, hcp: e.target.value})} />
+              </label>
+              <label style={{...S.label, flex:1}}>CANCHA
+                <select style={S.input} onChange={e => setSetup({...setup, course: e.target.value})}>
+                  {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+            </div>
+            <button onClick={() => setView("wizard")} disabled={!setup.playerId} style={S.btnPrimary}>INICIAR TARJETA ONLINE</button>
+          </div>
         </div>
-        <button onClick={onNext} style={S.btnPrimary}>CARGAR TARJETA ONLINE</button>
-      </div>
+      )}
+
+      {view === "wizard" && (
+        <Wizard setup={setup} allScores={scores} onSave={async (d) => { await addDoc(collection(db, "scores"), {...d, createdAt: new Date()}); setView("home"); }} onBack={() => setView("home")} />
+      )}
+
+      {view === "ranking_anual" && (
+        <div>
+          <button onClick={() => setView("home")} style={S.backBtn}>← VOLVER AL FIELD</button>
+          <h2 style={{ letterSpacing: 2, marginBottom: 20 }}>RANKING ANUAL ACUMULADO</h2>
+          {PLAYERS.map((p, i) => (
+            <div key={p.id} style={{ ...S.card, opacity: currentPoints[p.id] > 0 ? 1 : 0.4 }}>
+              <span style={{ fontWeight: 900, color: "#444", width: 25 }}>{i+1}</span>
+              <span style={{ flex: 1, fontWeight: 700 }}>{p.name.toUpperCase()}</span>
+              <span style={{ fontWeight: 900, fontSize: 20 }}>{currentPoints[p.id]} PTS</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function ScorecardOnline({ setup, allScores, onSave }) {
+function Wizard({ setup, allScores, onSave, onBack }) {
   const [holes, setHoles] = useState(Array(18).fill(""));
   const gross = holes.reduce((a, b) => a + (parseInt(b) || 0), 0);
   const net = gross - (parseInt(setup.hcp) || 0);
 
   return (
     <div>
-      <div style={{ background: "#111", padding: 15, borderRadius: 10, marginBottom: 15, border: "1px solid #222" }}>
-        <div style={{ fontWeight: 900, fontSize: 18 }}>{PLAYERS.find(p => p.id === setup.playerId).name}</div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
-          <span style={{color: "#444"}}>{setup.course} · Neto: {net}</span>
-          <span style={{color: "#00ff88", fontWeight: 900}}>GROSS: {gross}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, alignItems: "center" }}>
+        <button onClick={onBack} style={S.backBtn}>SALIR</button>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#00ff88" }}>GROSS: {gross}</div>
+          <div style={{ fontSize: 14, color: "#FFD700" }}>NETO: {net}</div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 5, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginBottom: 25 }}>
         {holes.map((h, i) => (
-          <input key={i} type="number" placeholder={i+1} style={{...S.input, padding: 8, textAlign: "center"}} value={h} onChange={e => {
-            const n = [...holes]; n[i] = e.target.value; setHoles(n);
-          }} />
-        ))}
-      </div>
-      <div style={{ marginBottom: 15 }}>
-        <span style={S.label}>Scores del resto hoy</span>
-        {allScores.filter(s => s.date === setup.date).map(s => (
-          <div key={s.id} style={{ fontSize: 12, background: "#0a0a0a", padding: 8, borderRadius: 5, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
-            <span>{PLAYERS.find(p => p.id === s.playerId)?.name}</span>
-            <span>{s.netScore} NETO</span>
+          <div key={i}>
+            <div style={{ fontSize: 9, color: "#444", textAlign: "center", marginBottom: 3 }}>{i+1}</div>
+            <input type="number" style={{...S.input, padding: 8, textAlign: "center", fontSize: 16}} value={h} onChange={e => {
+              const n = [...holes]; n[i] = e.target.value; setHoles(n);
+            }} />
           </div>
         ))}
       </div>
-      <button onClick={() => onSave({ ...setup, holes, gross, netScore: net })} style={S.btnPrimary}>GUARDAR Y CERRAR</button>
+      <div style={{ marginBottom: 25, background: "#0a0a0a", padding: 15, borderRadius: 10, border: "1px solid #111" }}>
+        <span style={S.label}>Scores del día en vivo (Live)</span>
+        {allScores.filter(s => s.date === setup.date).map(s => (
+          <div key={s.id} style={{ display:"flex", justifyContent:"space-between", fontSize: 13, padding: "8px 0", borderBottom: "1px solid #111" }}>
+            <span>{PLAYERS.find(p => p.id === s.playerId)?.name}</span>
+            <span style={{ fontWeight: 900, color: "#FFD700" }}>{s.netScore} NETO</span>
+          </div>
+        ))}
+        {allScores.filter(s => s.date === setup.date).length === 0 && <div style={{fontSize: 12, color: "#333", marginTop: 5}}>Nadie más está cargando hoy.</div>}
+      </div>
+      <button onClick={() => onSave({ ...setup, holes, gross, netScore: net })} style={S.btnPrimary}>GUARDAR Y CERRAR TARJETA</button>
     </div>
   );
 }
 
-function RankingGross({ scores, onBack }) {
-  const stats = PLAYERS.map(p => {
-    const pScores = scores.filter(s => s.playerId === p.id);
-    const bestG = pScores.length > 0 ? Math.min(...pScores.map(s => s.gross)) : "-";
-    return { ...p, bestG };
-  }).sort((a, b) => (a.bestG === "-" ? 1 : b.bestG === "-" ? -1 : a.bestG - b.bestG));
-
-  return (
-    <div>
-      <button onClick={onBack} style={S.back}>← VOLVER</button>
-      <h2 style={{ letterSpacing: 2 }}>RANKING MEJOR GROSS</h2>
-      {stats.map((p, i) => (
-        <div key={p.id} style={{ ...S.cardPlayer, marginBottom: 5 }}>
-          <span>{i+1}. {p.name}</span>
-          <span style={{ fontWeight: 900, color: "#00ff88" }}>{p.bestG} G</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── DISEÑO Y LOGO ───────────────────────────
 function LogoSVG({ size }) {
   return (
     <svg width={size} height={size} viewBox="0 0 200 200" fill="none">
-      <circle cx="100" cy="100" r="90" stroke="white" strokeWidth="14" />
-      <path d="M 158 100 A 58 58 0 1 0 142 148" stroke="white" strokeWidth="14" />
-      <path d="M 58 155 L 58 90 L 100 128 L 142 90 L 142 155" stroke="white" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="100" cy="100" r="90" stroke="white" strokeWidth="12" />
+      <path d="M 158 100 A 58 58 0 1 0 142 148" stroke="white" strokeWidth="18" strokeLinecap="round" />
+      <path d="M 55 160 L 55 85 L 100 135 L 145 85 L 145 160" stroke="white" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 const S = {
-  cardPlayer: { background: "#111", padding: "10px 15px", borderRadius: 8, display: "flex", alignItems: "center", gap: 15, border: "1px solid #1a1a1a" },
-  avatar: { width: 30, height: 30, borderRadius: "50%", background: "#222", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900 },
-  label: { fontSize: 10, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6, display: "block" },
-  input: { width: "100%", padding: 12, background: "#111", color: "#fff", border: "1px solid #333", borderRadius: 8, boxSizing: "border-box", fontSize: 15 },
-  btnPrimary: { background: "#fff", color: "#000", border: "none", padding: 16, fontWeight: 900, borderRadius: 8, cursor: "pointer", width: "100%", letterSpacing: 1 },
-  btnSecondary: { background: "#111", color: "#fff", border: "1px solid #333", padding: 16, fontWeight: 900, borderRadius: 8, cursor: "pointer", width: "100%", letterSpacing: 1 },
-  back: { background: "none", border: "none", color: "#555", cursor: "pointer", marginBottom: 10 }
+  card: { background: "#0c0c0c", padding: "14px 18px", borderRadius: 12, display: "flex", alignItems: "center", gap: 15, border: "1px solid #1a1a1a" },
+  avatar: { width: 34, height: 34, borderRadius: "50%", background: "#111", border: "1px solid #222", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 12, color: "#666" },
+  label: { fontSize: 10, color: "#444", letterSpacing: 3, textTransform: "uppercase", marginBottom: 8, display: "block" },
+  input: { width: "100%", padding: 14, background: "#111", color: "#fff", border: "1px solid #2a2a2a", borderRadius: 10, boxSizing: "border-box", fontSize: 16 },
+  btnPrimary: { background: "#fff", color: "#000", border: "none", padding: 18, fontWeight: 900, borderRadius: 10, cursor: "pointer", width: "100%", letterSpacing: 2, fontSize: 14 },
+  btnSecondary: { background: "#000", color: "#fff", border: "1.5px solid #222", padding: 18, fontWeight: 900, borderRadius: 10, cursor: "pointer", width: "100%", letterSpacing: 2, fontSize: 14 },
+  backBtn: { background: "none", border: "none", color: "#666", cursor: "pointer", marginBottom: 15, fontSize: 12, letterSpacing: 1, fontWeight: 700 }
 };
