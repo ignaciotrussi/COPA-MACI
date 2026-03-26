@@ -32,30 +32,26 @@ const INITIAL_PLAYERS = [
 
 const PTS_TABLE = [10, 8, 6, 5, 4, 3, 2, 2, 2, 2, 2];
 
-// ─── COMPONENTE LOGO (Diseño CM) ──────────────
+// ─── COMPONENTE LOGO (Corregido) ──────────────
 const LogoMaciSVG = () => (
   <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org" style={{ margin: "0 auto", display: "block" }}>
-    <path d="M80 50C80 66.5685 66.5685 80 50 80C33.4315 80 20 66.5685 20 50C20 33.4315 33.4315 20 50 20C58.2843 20 65.7843 23.3579 71.2132 28.7868" stroke="white" strokeWidth="6" strokeLinecap="round""")/>>
-    <path d="M30 75L50 45L70 75" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round""")/>>
-    <path d="M40 60L50 45L60 60" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round""")/>>
+    <circle cx="50" cy="50" r="45" stroke="white" strokeWidth="4" />
+    <path d="M30 70C30 55 40 45 50 45C60 45 70 55 70 70" stroke="white" strokeWidth="6" strokeLinecap="round" />
+    <path d="M35 75L50 50L65 75" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
 export default function App() {
   const [view, setView] = useState("home");
   const [scores, setScores] = useState([]);
-  const [players, setPlayers] = useState(INITIAL_PLAYERS); // Carga inicial por defecto
+  const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [isAdmin, setIsAdmin] = useState(false);
   const [setup, setSetup] = useState({ date: new Date().toISOString().split('T')[0], playerId: "", hcp: "", course: "Hacoaj" });
 
   useEffect(() => {
-    // Sincronizar Jugadores desde Firebase (si existen)
     const unsubP = onSnapshot(collection(db, "players"), (snap) => {
-      if (!snap.empty) {
-        setPlayers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }
+      if (!snap.empty) setPlayers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-    // Sincronizar Scores
     const unsubS = onSnapshot(query(collection(db, "scores"), orderBy("date", "desc")), (snap) => {
       setScores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
@@ -65,7 +61,7 @@ export default function App() {
   const getRankedPlayers = () => {
     return players.map(p => {
       let pts = 0;
-      // Lógica simplificada de puntos acumulados para el ejemplo
+      // Lógica de puntos acumulados simplificada para visualización
       scores.filter(s => s.playerId === (p.id || p.name)).forEach(s => {
         pts += s.longDrive ? 1 : 0;
         pts += s.bestApproach ? 1 : 0;
@@ -90,7 +86,7 @@ export default function App() {
                 <span style={S.rankNum}>{i + 1}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 800, fontSize: 16 }}>{p.name.toUpperCase()}</div>
-                  <div style={{ fontSize: 10, color: "#666", letterSpacing: 1 }}>MATRÍCULA: {p.mat}</div>
+                  <div style={{ fontSize: 10, color: "#666" }}>MATRÍCULA: {p.mat}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: 24, fontWeight: 900, color: "#FFD700" }}>{p.totalPts}</div>
@@ -118,10 +114,11 @@ export default function App() {
         </>
       )}
 
-      {/* Otras vistas se mantienen igual pero con estilos corregidos */}
       {view === "add_player" && <AddView onBack={() => setView("home")} db={db} />}
       {view === "setup" && <SetupView setup={setup} setSetup={setSetup} players={players} onNext={() => setView("live")} onBack={() => setView("home")} />}
       {view === "live" && <LiveView setup={setup} onSave={async (d) => { await addDoc(collection(db, "scores"), d); setView("home"); }} onBack={() => setView("home")} />}
+      {view === "history" && <div style={S.container}><button onClick={() => setView("home")} style={S.back}>← VOLVER</button><h2>HISTORIAL PROX.</h2></div>}
+      {view === "gira" && <div style={S.container}><button onClick={() => setView("home")} style={S.back}>← VOLVER</button><h2>GIRA PROX.</h2></div>}
     </div>
   );
 }
@@ -182,15 +179,14 @@ function LiveView({ setup, onSave, onBack }) {
   );
 }
 
-// ─── ESTILOS ─────────────────────────────────
 const S = {
   container: { maxWidth: 450, margin: "0 auto", padding: "20px", backgroundColor: "#000", minHeight: "100vh", color: "white", fontFamily: "sans-serif" },
   label: { fontSize: 10, letterSpacing: 3, color: "#444", fontWeight: 900, marginBottom: 15, display: "block" },
   cardPlayer: { display: "flex", alignItems: "center", padding: "18px 0", borderBottom: "1px solid #151515" },
   rankNum: { width: 40, fontSize: 20, fontWeight: 900, color: "#333" },
   footer: { display: "flex", flexDirection: "column", gap: 10 },
-  btnMenu: { backgroundColor: "#fff", color: "#000", border: "none", padding: "14px", borderRadius: 10, fontWeight: 900, cursor: "pointer", transform: "scale(0.85)", textTransform: "uppercase", letterSpacing: 1 },
-  btnPrimary: { backgroundColor: "#FFD700", color: "#000", border: "none", padding: 18, borderRadius: 10, fontWeight: 900, width: "100%", marginTop: 10 },
+  btnMenu: { backgroundColor: "#fff", color: "#000", border: "none", padding: "14px", borderRadius: 10, fontWeight: 900, cursor: "pointer", transform: "scale(0.85)", textTransform: "uppercase" },
+  btnPrimary: { backgroundColor: "#FFD700", color: "#000", border: "none", padding: 18, borderRadius: 10, fontWeight: 900, width: "100%" },
   input: { width: "100%", padding: 15, marginBottom: 10, borderRadius: 10, border: "1px solid #222", backgroundColor: "#111", color: "white" },
   back: { background: "none", color: "#444", border: "none", fontWeight: 800, cursor: "pointer" },
   btnAdmin: { background: "none", border: "1px solid #222", color: "#444", padding: "8px 15px", borderRadius: 6, fontSize: 10, fontWeight: 800 },
