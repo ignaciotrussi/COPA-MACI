@@ -1,9 +1,903 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
+import React, { useState, useEffect, useCallback } from "react";
+import { initializeApp } from "firebase/app";
+import {
+  getFirestore, collection, addDoc, deleteDoc,
+  doc, onSnapshot, query, orderBy, serverTimestamp
+} from "firebase/firestore";
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ─── LOGO FIEL AL ORIGINAL ────────────────────────────────────────────────────
+// Círculo exterior + aro C interior (abre abajo) + M con patas
+function LogoSVG({ size = 64 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 200 200" fill="none">
+      {/* Círculo exterior grueso */}
+      <circle cx="100" cy="100" r="90" stroke="white" strokeWidth="14" fill="none" />
+      {/* Aro interior que forma la C — casi completo, se abre abajo entre las patas */}
+      <path
+        d="M 155 100 A 55 55 0 1 0 140 148"
+        stroke="white" strokeWidth="14" fill="none" strokeLinecap="round"
+      />
+      {/* M: dos patas bajan desde los extremos, suben a picos y se encuentran en el centro */}
+      <path
+        d="M 60 158 L 60 92 L 100 130 L 140 92 L 140 158"
+        stroke="white" strokeWidth="14" fill="none"
+        strokeLinejoin="round" strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ─── CONSTANTES ───────────────────────────────────────────────────────────────
+const PLAYERS = [
+  { id:"p01", name:"Esteban Chicco",           mat:"56229",  av:"EC" },
+  { id:"p02", name:"Juan José Hardoy",         mat:"112534", av:"JH" },
+  { id:"p03", name:"Manuel Gosende",           mat:"175387", av:"MG" },
+  { id:"p04", name:"Rodrigo López Martínez",   mat:"132679", av:"RL" },
+  { id:"p05", name:"Ignacio Trussi",           mat:"46215",  av:"IT" },
+  { id:"p06", name:"Andrés Torres Carbonell",  mat:"52274",  av:"AT" },
+  { id:"p07", name:"Federico Procaccini",      mat:"121277", av:"FP" },
+  { id:"p08", name:"Ignacio Macías",           mat:"45585",  av:"IM" },
+  { id:"p09", name:"Mariano Bustillo",         mat:"119275", av:"MB" },
+  { id:"p10", name:"Carlos Segundo Morixe",    mat:"119372", av:"CM" },
+  { id:"p11", name:"Francisco Goldaracena",    mat:"173455", av:"FG" },
+];
+
+const TEES = ["Blanco","Negro","Amarillo","Azul"];
+const TEE_COLORS = { Blanco:"#e5e5e5", Negro:"#777", Amarillo:"#ca8a04", Azul:"#2563eb" };
+
+const COURSES = {
+  "Hacoaj":       [4,3,5,4,3,5,4,4,4, 4,4,3,5,4,3,5,4,4],
+  "Jockey Club":  [4,5,3,4,4,3,5,4,4, 4,3,5,4,4,3,5,4,4],
+  "Los Lagartos": [4,4,3,5,4,4,3,5,4, 4,4,3,5,4,4,3,5,4],
+  "Hindú Club":   [4,4,4,3,5,4,4,3,4, 4,4,4,3,5,4,4,3,4],
+  "CASI":         [4,3,4,5,4,3,4,5,4, 4,3,4,5,4,3,4,5,4],
+  "Otro campo":   [4,4,4,3,5,4,4,3,4, 4,4,4,3,5,4,4,3,4],
+};
+const COURSE_NAMES = Object.keys(COURSES);
+
+const PTS_TABLE = [10, 8, 6, 5, 4, 3]; // pos 1-6; 7-12 → 2
+
+// Datos históricos de Marzo (ya jugados)
+const SEED = [
+  // 8 Mar
+  { monthKey:"2026-03", dateLabel:"8 Mar",  playerId:"p02", netScore:69, back9:44,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"8 Mar",  playerId:"p04", netScore:73, back9:51,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"8 Mar",  playerId:"p05", netScore:74, back9:43,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"8 Mar",  playerId:"p09", netScore:81, back9:50,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  // 15 Mar
+  { monthKey:"2026-03", dateLabel:"15 Mar", playerId:"p09", netScore:74, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"15 Mar", playerId:"p10", netScore:76, back9:null,  longDrive:true,  bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"15 Mar", playerId:"p05", netScore:77, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"15 Mar", playerId:"p08", netScore:85, back9:null,  longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  // 22 Mar
+  { monthKey:"2026-03", dateLabel:"22 Mar", playerId:"p07", netScore:75, back9:41,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"22 Mar", playerId:"p06", netScore:75, back9:44,   longDrive:false, bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+  { monthKey:"2026-03", dateLabel:"22 Mar", playerId:"p01", netScore:76, back9:40,   longDrive:true,  bestApproach:false, course:"Hacoaj", tee:"Blanco", seeded:true },
+];
+
+// ─── LÓGICA DE PUNTOS ─────────────────────────────────────────────────────────
+// monthKey = "YYYY-MM"
+function getMonthKey(dateStr) {
+  // dateStr puede ser "8 Mar", "2026-04-12", etc.
+  // Normalizamos: si tiene formato "D Mes" lo mapeamos
+  const months = { Jan:"01",Feb:"01",Mar:"03",Abr:"04",Apr:"04",May:"05",
+                   Jun:"06",Jul:"07",Ago:"08",Aug:"08",Sep:"09",Oct:"10",
+                   Nov:"11",Dic:"12",Dec:"12" };
+  const parts = dateStr.trim().split(/[\s\-\/]/);
+  if (parts.length >= 2) {
+    const mon = months[parts[1]] || parts[1];
+    const yr  = parts[2] || "2026";
+    return `${yr}-${mon}`;
+  }
+  return "2026-00";
+}
+
+// Por mes: tomar el mejor score neto de cada jugador
+// Empate → menor back9 gana
+function bestPerPlayer(monthScores) {
+  const map = {};
+  monthScores.forEach(s => {
+    const cur = map[s.playerId];
+    if (!cur) {
+      map[s.playerId] = { ...s };
+    } else {
+      const better = s.netScore < cur.netScore ||
+        (s.netScore === cur.netScore && (s.back9 ?? 999) < (cur.back9 ?? 999));
+      map[s.playerId] = better
+        ? { ...s, longDrive: s.longDrive || cur.longDrive, bestApproach: s.bestApproach || cur.bestApproach }
+        : { ...cur, longDrive: cur.longDrive || s.longDrive, bestApproach: cur.bestApproach || s.bestApproach };
+    }
+  });
+  return Object.values(map);
+}
+
+function rankMonth(monthScores) {
+  const bests = bestPerPlayer(monthScores);
+  return [...bests]
+    .sort((a, b) => a.netScore !== b.netScore
+      ? a.netScore - b.netScore
+      : (a.back9 ?? 999) - (b.back9 ?? 999))
+    .map((r, i) => ({
+      ...r,
+      position: i + 1,
+      points: (i < 6 ? PTS_TABLE[i] : i < 12 ? 2 : 0)
+            + (r.longDrive ? 1 : 0)
+            + (r.bestApproach ? 1 : 0),
+    }));
+}
+
+// Totales anuales por jugador
+function annualTotals(allScores) {
+  // Agrupar por mes
+  const byMonth = {};
+  allScores.forEach(s => {
+    const mk = s.monthKey || getMonthKey(s.dateLabel || "");
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(s);
+  });
+
+  const playerPts = {};
+  PLAYERS.forEach(p => { playerPts[p.id] = { pts:0, played:0, wins:0, history:[] }; });
+
+  Object.entries(byMonth).forEach(([mk, ms]) => {
+    const ranked = rankMonth(ms);
+    ranked.forEach(r => {
+      if (!playerPts[r.playerId]) return;
+      playerPts[r.playerId].pts    += r.points;
+      playerPts[r.playerId].played += 1;
+      if (r.position === 1) playerPts[r.playerId].wins += 1;
+      playerPts[r.playerId].history.push({ monthKey:mk, position:r.position, points:r.points, netScore:r.netScore });
+    });
+  });
+
+  return PLAYERS.map(p => ({
+    ...p,
+    ...playerPts[p.id],
+    avg: playerPts[p.id].played ? (playerPts[p.id].pts / playerPts[p.id].played).toFixed(1) : null,
+  })).sort((a, b) => b.pts - a.pts);
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const pById = id => PLAYERS.find(p => p.id === id);
+const newId  = () => "loc_" + Date.now() + Math.random().toString(36).slice(2,5);
+
+function todayLabel() {
+  const d = new Date();
+  const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return `${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+function monthKeyFromLabel(label) {
+  return getMonthKey(label);
+}
+
+// ─── ATOMS ────────────────────────────────────────────────────────────────────
+const C = {
+  card:  { background:"#0a0a0a", border:"1px solid #1a1a1a", borderRadius:8 },
+  lbl:   { fontSize:9, color:"#555", letterSpacing:3, textTransform:"uppercase",
+           marginBottom:6, display:"block" },
+  input: { background:"#111", border:"1px solid #2a2a2a", color:"#fff",
+           padding:"10px 12px", borderRadius:6, fontSize:14, outline:"none",
+           fontFamily:"'Barlow Condensed',sans-serif", width:"100%", boxSizing:"border-box" },
+};
+
+function Av({ av, size=36 }) {
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", background:"#111",
+      border:"1.5px solid #222", display:"flex", alignItems:"center", justifyContent:"center",
+      fontWeight:700, fontSize:size*0.33, color:"#ccc", flexShrink:0,
+      fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:1 }}>
+      {av}
+    </div>
+  );
+}
+
+function Medal({ n, size=26 }) {
+  const s = n===1 ? {bg:"#FFD700",c:"#000"}
+          : n===2 ? {bg:"#C0C0C0",c:"#000"}
+          : n===3 ? {bg:"#8B6914",c:"#fff"}
+          : {bg:"#111",c:"#555",b:"1px solid #222"};
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", background:s.bg,
+      color:s.c, border:s.b||"none", display:"flex", alignItems:"center",
+      justifyContent:"center", fontWeight:800, fontSize:size*0.44, flexShrink:0 }}>
+      {n}
+    </div>
+  );
+}
+
+function Btn({ children, onClick, disabled, variant="primary", style={} }) {
+  const bg = variant==="primary" ? (disabled?"#1a1a1a":"#fff") : "#111";
+  const co = variant==="primary" ? (disabled?"#333":"#000") : "#aaa";
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background:bg, color:co, border: variant==="primary"?"none":"1px solid #222",
+      padding:"12px", borderRadius:6, cursor:disabled?"not-allowed":"pointer",
+      fontSize:13, fontWeight:800, fontFamily:"'Barlow Condensed',sans-serif",
+      letterSpacing:2, width:"100%", ...style
+    }}>{children}</button>
+  );
+}
+
+function BackBtn({ onClick }) {
+  return (
+    <button onClick={onClick} style={{ background:"none", border:"none", color:"#555",
+      cursor:"pointer", fontSize:12, padding:0, marginBottom:16, display:"block",
+      fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:2 }}>
+      ← VOLVER
+    </button>
+  );
+}
+
+// ─── VIEWS ────────────────────────────────────────────────────────────────────
+
+// ── 1. HOME / LEADERBOARD ────────────────────────────────────────────────────
+function HomeView({ allScores, onNav }) {
+  const totals = annualTotals(allScores);
+  const active = totals.filter(p => p.played > 0);
+  const playedMonths = [...new Set(allScores.map(s => s.monthKey || getMonthKey(s.dateLabel||"")))].length;
+
+  return (
+    <div>
+      {/* Hero */}
+      <div style={{ textAlign:"center", padding:"20px 0 24px" }}>
+        <LogoSVG size={72} />
+        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:34, fontWeight:900,
+          color:"#fff", letterSpacing:6, marginTop:10, lineHeight:1 }}>COPA MACI</div>
+        <div style={{ fontSize:10, color:"#444", letterSpacing:4, marginTop:3 }}>TEMPORADA 2026</div>
+        <div style={{ fontSize:11, color:"#444", marginTop:6 }}>{playedMonths} de 8 meses jugados</div>
+      </div>
+
+      {/* Podio top 3 */}
+      {active.length >= 3 && (() => {
+        const order = [active[1], active[0], active[2]];
+        const hs = [86, 110, 68]; const ps = [2,1,3];
+        return (
+          <div style={{ display:"flex", justifyContent:"center", alignItems:"flex-end",
+            gap:8, marginBottom:28 }}>
+            {order.map((p, i) => !p ? null : (
+              <div key={p.id} style={{ display:"flex", flexDirection:"column",
+                alignItems:"center", gap:4 }}>
+                <Av av={p.av} size={38} />
+                <div style={{ fontSize:11, color:"#aaa", fontFamily:"'Barlow Condensed',sans-serif",
+                  fontWeight:600, textAlign:"center", maxWidth:76, lineHeight:1.2 }}>
+                  {p.name.split(" ")[0]}
+                </div>
+                <div style={{ width:76, height:hs[i],
+                  background:i===1?"#fff":"#111",
+                  border:`1px solid ${i===1?"#fff":"#2a2a2a"}`,
+                  borderRadius:"5px 5px 0 0",
+                  display:"flex", flexDirection:"column",
+                  alignItems:"center", justifyContent:"center", gap:2 }}>
+                  <Medal n={ps[i]} size={22} />
+                  <div style={{ fontSize:20, fontWeight:900,
+                    color:i===1?"#000":"#fff",
+                    fontFamily:"'Barlow Condensed',sans-serif" }}>{p.pts}</div>
+                  <div style={{ fontSize:9, color:i===1?"#555":"#333" }}>pts</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Tabla ranking completa — DINÁMICA y ordenada por puntos */}
+      <div style={{ marginBottom:24 }}>
+        <span style={C.lbl}>Ranking anual</span>
+        {totals.map((p, i) => (
+          <div key={p.id} style={{ ...C.card, padding:"10px 13px",
+            display:"flex", alignItems:"center", gap:10,
+            marginBottom:5, opacity:p.played===0?0.25:1 }}>
+            <Medal n={i+1} size={24} />
+            <Av av={p.av} size={30} />
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontWeight:700, color:"#fff", fontSize:14,
+                fontFamily:"'Barlow Condensed',sans-serif",
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {p.name}
+              </div>
+              <div style={{ fontSize:10, color:"#444" }}>
+                Mat. {p.mat}
+                {p.played>0 && ` · ${p.played} mes${p.played>1?"es":""}${p.wins>0?" · "+p.wins+"🏆":""}`}
+              </div>
+            </div>
+            <div style={{ textAlign:"right", flexShrink:0 }}>
+              <div style={{ fontSize:23, fontWeight:900,
+                color:p.played>0?"#fff":"#1a1a1a",
+                fontFamily:"'Barlow Condensed',sans-serif" }}>{p.pts}</div>
+              {p.avg && <div style={{ fontSize:10, color:"#444" }}>{p.avg}/m</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Botones nav */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:24 }}>
+        <button onClick={()=>onNav("scorecard")} style={{
+          background:"#fff", border:"none", color:"#000", padding:"14px",
+          borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:900,
+          fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:2 }}>
+          ⛳ CARGAR TARJETA
+        </button>
+        <button onClick={()=>onNav("history")} style={{
+          background:"#111", border:"1px solid #222", color:"#fff", padding:"14px",
+          borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:900,
+          fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:2 }}>
+          📋 HISTORIAL
+        </button>
+        <button onClick={()=>onNav("gira")} style={{
+          background:"#111", border:"1px solid #222", color:"#fff", padding:"14px",
+          borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:900,
+          fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:2 }}>
+          🏌️ MODO GIRA
+        </button>
+      </div>
+
+      {/* Leyenda puntos */}
+      <div style={{ ...C.card, padding:"11px 13px" }}>
+        <span style={C.lbl}>Sistema de puntos</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"3px 8px", marginBottom:4 }}>
+          {["1°→10","2°→8","3°→6","4°→5","5°→4","6°→3","7-12°→2","Long Drive +1","Best Approach +1"].map(s=>(
+            <span key={s} style={{ fontSize:11, color:"#444",
+              fontFamily:"'Barlow Condensed',sans-serif" }}>{s}</span>
+          ))}
+        </div>
+        <div style={{ fontSize:10, color:"#2a2a2a" }}>
+          Mejor score neto del mes por jugador · Empate desempata la vuelta
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 2. CARGAR TARJETA (Wizard 3 pasos) ───────────────────────────────────────
+function ScorecardView({ allScores, onSave, onBack }) {
+  const [step,     setStep]     = useState(1);
+  const [player,   setPlayer]   = useState(null);
+  const [dateLabel,setDateLabel]= useState(todayLabel());
+  const [course,   setCourse]   = useState(COURSE_NAMES[0]);
+  const [tee,      setTee]      = useState("Blanco");
+  const [handicap, setHandicap] = useState("");
+  const [holes,    setHoles]    = useState(Array(18).fill(""));
+  const [ld,       setLd]       = useState(false);
+  const [ba,       setBa]       = useState(false);
+  const [liveRank, setLiveRank] = useState([]);
+
+  const pars       = COURSES[course] || Array(18).fill(4);
+  const totalPar   = pars.reduce((a,b)=>a+b,0);
+  const front9Par  = pars.slice(0,9).reduce((a,b)=>a+b,0);
+  const back9Par   = pars.slice(9).reduce((a,b)=>a+b,0);
+  const hcp        = parseInt(handicap)||0;
+  const grossFront = holes.slice(0,9).reduce((a,h)=>a+(parseInt(h)||0),0);
+  const grossBack  = holes.slice(9).reduce((a,h)=>a+(parseInt(h)||0),0);
+  const grossTotal = grossFront + grossBack;
+  const netScore   = grossTotal - hcp;
+  const filled     = holes.filter(h=>h!=="").length;
+
+  // Actualizar ranking en vivo mientras se cargan hoyos
+  useEffect(() => {
+    if (!player || filled === 0) return;
+    const mk = monthKeyFromLabel(dateLabel);
+    const monthScores = allScores.filter(s =>
+      (s.monthKey||getMonthKey(s.dateLabel||"")) === mk
+    );
+    const tmp = [
+      ...monthScores.filter(s => s.playerId !== player.id),
+      { id:"__live__", monthKey:mk, playerId:player.id,
+        netScore:grossTotal-hcp, back9:grossBack, longDrive:ld, bestApproach:ba }
+    ];
+    setLiveRank(rankMonth(tmp));
+  }, [holes, ld, ba, dateLabel]);
+
+  function finish() {
+    const mk = monthKeyFromLabel(dateLabel);
+    onSave({
+      monthKey:    mk,
+      dateLabel,
+      playerId:    player.id,
+      netScore:    grossTotal - hcp,
+      back9:       grossBack,
+      longDrive:   ld,
+      bestApproach:ba,
+      course,
+      tee,
+      handicap:    hcp,
+      holes:       holes.map(h => parseInt(h)||0),
+    });
+    setStep(3);
+  }
+
+  const holeColor = (v, par) => {
+    if (!v) return "#0f0f0f";
+    const d = v - par;
+    if (d <= -2) return "#78350f";
+    if (d === -1) return "#14532d";
+    if (d ===  0) return "#1e3a5f";
+    if (d ===  1) return "#7c2d12";
+    return "#450a0a";
+  };
+
+  // PASO 1 — Setup
+  if (step === 1) return (
+    <div>
+      <BackBtn onClick={onBack} />
+      <div style={{ marginBottom:18 }}>
+        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22,
+          fontWeight:900, color:"#fff", letterSpacing:3 }}>NUEVA TARJETA</div>
+      </div>
+
+      {/* Jugador */}
+      <div style={{ marginBottom:14 }}>
+        <span style={C.lbl}>1 · Jugador</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {PLAYERS.map(p => (
+            <button key={p.id} onClick={()=>setPlayer(p)} style={{
+              background:player?.id===p.id?"#fff":"#0d0d0d",
+              border:`1px solid ${player?.id===p.id?"#fff":"#1e1e1e"}`,
+              color:player?.id===p.id?"#000":"#888",
+              padding:"6px 12px", borderRadius:5, cursor:"pointer",
+              fontSize:12, fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700 }}>
+              {p.name.split(" ")[0]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Fecha — OBLIGATORIA para el cálculo mensual */}
+      <div style={{ marginBottom:14 }}>
+        <span style={C.lbl}>2 · Fecha <span style={{color:"#f87171"}}>*requerida para el ranking mensual</span></span>
+        <input value={dateLabel} onChange={e=>setDateLabel(e.target.value)}
+          placeholder="ej. 12 Abr" style={C.input} />
+        {dateLabel && (
+          <div style={{ fontSize:10, color:"#555", marginTop:3 }}>
+            Mes: {monthKeyFromLabel(dateLabel)}
+          </div>
+        )}
+      </div>
+
+      {/* Campo */}
+      <div style={{ marginBottom:14 }}>
+        <span style={C.lbl}>3 · Campo de juego</span>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {COURSE_NAMES.map(c => (
+            <button key={c} onClick={()=>setCourse(c)} style={{
+              background:course===c?"#fff":"#0d0d0d",
+              border:`1px solid ${course===c?"#fff":"#1e1e1e"}`,
+              color:course===c?"#000":"#888",
+              padding:"6px 11px", borderRadius:5, cursor:"pointer",
+              fontSize:11, fontFamily:"'Barlow Condensed',sans-serif", fontWeight:700 }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tee */}
+      <div style={{ marginBottom:14 }}>
+        <span style={C.lbl}>4 · Circuito / Salida</span>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6 }}>
+          {TEES.map(t => {
+            const active = tee === t;
+            const tc = TEE_COLORS[t];
+            return (
+              <button key={t} onClick={()=>setTee(t)} style={{
+                background:active?tc:"#0d0d0d",
+                border:`2px solid ${active?tc:"#1e1e1e"}`,
+                color:active?(t==="Blanco"||t==="Amarillo"?"#000":"#fff"):"#666",
+                padding:"10px 4px", borderRadius:6, cursor:"pointer",
+                fontFamily:"'Barlow Condensed',sans-serif", fontWeight:800, fontSize:12,
+                display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                <div style={{ width:13, height:13, borderRadius:"50%",
+                  background:active?(t==="Blanco"?"#000":tc):"#333",
+                  border:`2px solid ${tc}` }} />
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Handicap */}
+      <div style={{ marginBottom:20 }}>
+        <span style={C.lbl}>5 · Handicap de juego</span>
+        <input type="number" inputMode="numeric" value={handicap}
+          onChange={e=>setHandicap(e.target.value)} placeholder="ej. 14"
+          style={{ ...C.input, fontSize:28, fontWeight:900, textAlign:"center", padding:"14px" }} />
+      </div>
+
+      <Btn disabled={!player||!handicap||!dateLabel} onClick={()=>setStep(2)}>
+        INICIAR TARJETA →
+      </Btn>
+    </div>
+  );
+
+  // PASO 2 — 18 hoyos
+  if (step === 2) return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between",
+        alignItems:"center", marginBottom:12 }}>
+        <BackBtn onClick={()=>setStep(1)} />
+        <div style={{ textAlign:"right" }}>
+          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:14,
+            fontWeight:700, color:"#fff" }}>{player?.name}</div>
+          <div style={{ fontSize:10, color:"#555" }}>
+            {dateLabel} · {course} · {tee} · HCP {hcp}
+          </div>
+        </div>
+      </div>
+
+      {/* Totales en vivo */}
+      <div style={{ ...C.card, padding:"10px 14px", marginBottom:12,
+        display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
+        {[
+          ["FRONT", grossFront, front9Par],
+          ["BACK",  grossBack,  back9Par],
+          ["TOTAL", grossTotal, totalPar],
+          ["NETO",  grossTotal ? netScore : null, null],
+        ].map(([label, val, par]) => {
+          const diff = par!=null&&val ? val-par : null;
+          const col  = !val ? "#333"
+            : diff===null ? "#fff"
+            : diff===0    ? "#60a5fa"
+            : diff<0      ? "#4ade80"
+            : "#f87171";
+          return (
+            <div key={label} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:8, color:"#444", letterSpacing:2, marginBottom:2 }}>{label}</div>
+              <div style={{ fontSize:21, fontWeight:900, color:col,
+                fontFamily:"'Barlow Condensed',sans-serif", lineHeight:1 }}>
+                {val||"—"}
+              </div>
+              {diff!=null&&val>0&&(
+                <div style={{ fontSize:9, color:diff>0?"#f87171":diff<0?"#4ade80":"#555" }}>
+                  {diff>0?"+":""}{diff||"E"}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Hoyos 1-9 y 10-18 */}
+      {[0,1].map(half => (
+        <div key={half} style={{ marginBottom:10 }}>
+          <div style={{ fontSize:9, color:"#333", letterSpacing:2, marginBottom:5 }}>
+            {half===0?"FRENTE  1-9":"VUELTA  10-18"}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(9,1fr)", gap:3 }}>
+            {Array(9).fill(null).map((_, j) => {
+              const i   = half*9+j;
+              const v   = parseInt(holes[i])||0;
+              const par = pars[i];
+              return (
+                <div key={i} style={{ display:"flex", flexDirection:"column",
+                  alignItems:"center", gap:1 }}>
+                  <div style={{ fontSize:7, color:"#333" }}>{i+1}</div>
+                  <div style={{ fontSize:7, color:"#222" }}>P{par}</div>
+                  <input
+                    type="number" inputMode="numeric" min={1} max={15}
+                    value={holes[i]}
+                    onChange={e => { const h=[...holes]; h[i]=e.target.value; setHoles(h); }}
+                    style={{ width:"100%", height:36, textAlign:"center",
+                      background:holeColor(v, par),
+                      border:`1px solid ${v?"transparent":"#1a1a1a"}`,
+                      color:"#fff", borderRadius:4, fontSize:15, fontWeight:800,
+                      outline:"none", fontFamily:"'Barlow Condensed',sans-serif" }}
+                  />
+                  <div style={{ fontSize:7, minHeight:9,
+                    color:v?(v-par<0?"#4ade80":v-par>0?"#f87171":"#555"):"transparent" }}>
+                    {v ? (v-par<0?"▼":"▲") : "·"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", gap:12,
+            marginTop:3, paddingTop:3, borderTop:"1px solid #111" }}>
+            <span style={{ fontSize:10, color:"#333" }}>Par {half===0?front9Par:back9Par}</span>
+            <span style={{ fontSize:10, color:"#777", fontWeight:700 }}>
+              {half===0?(grossFront||"—"):(grossBack||"—")}
+            </span>
+          </div>
+        </div>
+      ))}
+
+      {/* Premios especiales */}
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        {[[ld,setLd,"🏌️ Long Drive"],[ba,setBa,"🎯 Best Approach"]].map(([v,s,lbl],i) => (
+          <button key={i} onClick={()=>s(!v)} style={{
+            flex:1, background:v?"#fff":"#0d0d0d",
+            border:`1px solid ${v?"#fff":"#1e1e1e"}`, color:v?"#000":"#555",
+            padding:"9px 0", borderRadius:5, cursor:"pointer", fontSize:12, fontWeight:700,
+            fontFamily:"'Barlow Condensed',sans-serif", letterSpacing:1 }}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* Ranking en vivo del mes */}
+      {liveRank.length > 0 && (
+        <div style={{ ...C.card, padding:"10px 12px", marginBottom:14 }}>
+          <span style={C.lbl}>Ranking en vivo — {monthKeyFromLabel(dateLabel)}</span>
+          {liveRank.slice(0,8).map(r => {
+            const p = pById(r.playerId);
+            const isMe = r.playerId === player?.id;
+            return (
+              <div key={r.playerId} style={{ display:"flex", alignItems:"center", gap:8,
+                padding:"4px 6px", borderRadius:4,
+                background:isMe?"#ffffff08":"transparent" }}>
+                <Medal n={r.position} size={19} />
+                <span style={{ flex:1, fontSize:12, color:isMe?"#fff":"#555",
+                  fontWeight:isMe?700:400, fontFamily:"'Barlow Condensed',sans-serif" }}>
+                  {p?.name.split(" ")[0]}{isMe?" ← vos":""}
+                </span>
+                <span style={{ fontSize:11, color:"#444" }}>Neto {r.netScore}</span>
+                <span style={{ fontSize:13, fontWeight:900,
+                  color:isMe?"#fff":"#444",
+                  fontFamily:"'Barlow Condensed',sans-serif",
+                  minWidth:22, textAlign:"right" }}>{r.points}p</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Btn disabled={filled<18} onClick={finish}>
+        {filled<18 ? `FALTAN ${18-filled} HOYOS` : "CERRAR TARJETA ✓"}
+      </Btn>
+    </div>
+  );
+
+  // PASO 3 — Confirmación
+  return (
+    <div style={{ textAlign:"center", padding:"48px 16px" }}>
+      <div style={{ fontSize:56, marginBottom:16 }}>✓</div>
+      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:26,
+        fontWeight:900, color:"#fff", letterSpacing:3, marginBottom:6 }}>TARJETA GUARDADA</div>
+      <div style={{ fontSize:14, color:"#555", marginBottom:4 }}>{player?.name}</div>
+      <div style={{ fontSize:36, fontWeight:900, color:"#fff",
+        fontFamily:"'Barlow Condensed',sans-serif", margin:"14px 0 4px" }}>
+        {netScore}
+      </div>
+      <div style={{ fontSize:12, color:"#444", marginBottom:28 }}>
+        Score neto · Bruto {grossTotal} · HCP {hcp}
+      </div>
+      <Btn onClick={onBack}>VOLVER AL INICIO</Btn>
+    </div>
+  );
+}
+
+// ── 3. HISTORIAL ─────────────────────────────────────────────────────────────
+function HistoryView({ allScores, onDelete, onBack }) {
+  const [filterPlayer, setFilterPlayer] = useState("all");
+  const [filterMonth,  setFilterMonth]  = useState("all");
+
+  // Agrupar todos los scores por mes
+  const byMonth = {};
+  allScores.forEach(s => {
+    const mk = s.monthKey || getMonthKey(s.dateLabel||"");
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(s);
+  });
+  const months = Object.keys(byMonth).sort().reverse();
+
+  const monthLabel = mk => {
+    const map = {"01":"Enero","02":"Febrero","03":"Marzo","04":"Abril","05":"Mayo",
+                 "06":"Junio","07":"Julio","08":"Agosto","09":"Septiembre","10":"Octubre",
+                 "11":"Noviembre","12":"Diciembre"};
+    const [yr, mo] = mk.split("-");
+    return `${map[mo]||mo} ${yr}`;
+  };
+
+  return (
+    <div>
+      <BackBtn onClick={onBack} />
+      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22,
+        fontWeight:900, color:"#fff", letterSpacing:3, marginBottom:16 }}>HISTORIAL</div>
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:8, marginBottom:16, overflowX:"auto" }}>
+        <select value={filterPlayer} onChange={e=>setFilterPlayer(e.target.value)}
+          style={{ ...C.input, flex:1 }}>
+          <option value="all">Todos los jugadores</option>
+          {PLAYERS.map(p=><option key={p.id} value={p.id}>{p.name.split(" ")[0]}</option>)}
+        </select>
+        <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
+          style={{ ...C.input, flex:1 }}>
+          <option value="all">Todos los meses</option>
+          {months.map(mk=><option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+        </select>
+      </div>
+
+      {months.length === 0 && (
+        <div style={{ textAlign:"center", color:"#333", padding:"40px 0", fontSize:14 }}>
+          Sin tarjetas cargadas todavía
+        </div>
+      )}
+
+      {months
+        .filter(mk => filterMonth==="all" || mk===filterMonth)
+        .map(mk => {
+          const ranked = rankMonth(byMonth[mk]);
+          const dayScores = byMonth[mk]
+            .filter(s => filterPlayer==="all" || s.playerId===filterPlayer)
+            .sort((a,b) => a.netScore - b.netScore);
+          if (dayScores.length === 0) return null;
+
+          return (
+            <div key={mk} style={{ marginBottom:24 }}>
+              {/* Header mes con ranking */}
+              <div style={{ ...C.card, padding:"10px 13px", marginBottom:8 }}>
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:16,
+                  fontWeight:900, color:"#fff", letterSpacing:2, marginBottom:8 }}>
+                  {monthLabel(mk)}
+                </div>
+                <span style={C.lbl}>Ranking del mes (mejor neto)</span>
+                {ranked.map(r => {
+                  const p = pById(r.playerId);
+                  if (!p) return null;
+                  return (
+                    <div key={r.playerId} style={{ display:"flex", alignItems:"center",
+                      gap:8, padding:"4px 0", borderBottom:"1px solid #0d0d0d" }}>
+                      <Medal n={r.position} size={20} />
+                      <span style={{ flex:1, fontSize:12, color:"#ccc",
+                        fontFamily:"'Barlow Condensed',sans-serif", fontWeight:600 }}>
+                        {p.name.split(" ")[0]}
+                      </span>
+                      <span style={{ fontSize:11, color:"#555" }}>
+                        Neto {r.netScore}{r.back9!=null?` · Vta ${r.back9}`:""}
+                        {r.longDrive?" 🏌️":""}{r.bestApproach?" 🎯":""}
+                      </span>
+                      <span style={{ fontSize:14, fontWeight:900, color:"#fff",
+                        fontFamily:"'Barlow Condensed',sans-serif", minWidth:26,
+                        textAlign:"right" }}>{r.points}p</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Todas las tarjetas del mes */}
+              <span style={C.lbl}>Todas las tarjetas</span>
+              {dayScores.map(s => {
+                const p = pById(s.playerId);
+                const isBest = ranked.some(r => r.playerId===s.playerId && r.netScore===s.netScore);
+                return (
+                  <div key={s.id} style={{ ...C.card, padding:"9px 12px",
+                    marginBottom:5, display:"flex", alignItems:"center", gap:9,
+                    opacity:isBest?1:0.45 }}>
+                    <Av av={p?.av||"?"} size={28} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ color:isBest?"#fff":"#555", fontWeight:600, fontSize:13,
+                        fontFamily:"'Barlow Condensed',sans-serif" }}>
+                        {p?.name.split(" ")[0]}
+                        {isBest && <span style={{ color:"#888", fontSize:10, marginLeft:4 }}>★ mejor</span>}
+                      </div>
+                      <div style={{ fontSize:10, color:"#444" }}>
+                        {s.dateLabel} · Neto {s.netScore}
+                        {s.back9!=null?` · Vta ${s.back9}`:""}
+                        {s.course?` · ${s.course}`:""}
+                        {s.longDrive?" · 🏌️":""}{s.bestApproach?" · 🎯":""}
+                      </div>
+                    </div>
+                    {!s.seeded && (
+                      <button onClick={()=>onDelete(s.id)} style={{ background:"none",
+                        border:"none", color:"#2a2a2a", cursor:"pointer",
+                        fontSize:16, padding:"0 4px" }}>✕</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+// ── 4. MODO GIRA ─────────────────────────────────────────────────────────────
+// Pendiente de definición del usuario — estructura lista para implementar
+function GiraView({ onBack }) {
+  return (
+    <div>
+      <BackBtn onClick={onBack} />
+      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22,
+        fontWeight:900, color:"#fff", letterSpacing:3, marginBottom:8 }}>MODO GIRA</div>
+      <div style={{ ...C.card, padding:20, textAlign:"center" }}>
+        <div style={{ fontSize:32, marginBottom:12 }}>🏌️</div>
+        <div style={{ color:"#555", fontSize:14, lineHeight:1.6 }}>
+          ¿Cómo funciona el Modo Gira?<br/>
+          Contanos el formato (equipos, match play, Ryder, etc.)<br/>
+          y lo implementamos.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [view,      setView]      = useState("home");
+  const [allScores, setAllScores] = useState(null);
+
+  // Escuchar Firebase en tiempo real
+  useEffect(() => {
+    const q = query(collection(db, "scores"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, snap => {
+      const fbScores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Combinar con seed (datos históricos fijos)
+      const ids = new Set(fbScores.map(s => s.id));
+      const combined = [
+        ...fbScores,
+        ...SEED.filter(s => !fbScores.some(fb =>
+          fb.playerId===s.playerId && fb.dateLabel===s.dateLabel && fb.monthKey===s.monthKey
+        )).map(s => ({ ...s, id: newId() }))
+      ];
+      setAllScores(combined);
+    }, err => {
+      console.error("Firebase error:", err);
+      // Fallback: solo seed
+      setAllScores(SEED.map(s => ({ ...s, id: newId() })));
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSave = useCallback(async (score) => {
+    try {
+      await addDoc(collection(db, "scores"), { ...score, createdAt: serverTimestamp() });
+    } catch (e) {
+      console.error("Save error:", e);
+      // Fallback local
+      setAllScores(prev => [...(prev||[]), { ...score, id: newId() }]);
+    }
+  }, []);
+
+  const handleDelete = useCallback(async (id) => {
+    try {
+      await deleteDoc(doc(db, "scores", id));
+    } catch (e) {
+      setAllScores(prev => prev.filter(s => s.id !== id));
+    }
+  }, []);
+
+  if (!allScores) return (
+    <div style={{ background:"#000", height:"100vh", display:"flex",
+      alignItems:"center", justifyContent:"center" }}>
+      <LogoSVG size={64} />
+    </div>
+  );
+
+  return (
+    <div style={{ background:"#000", minHeight:"100vh", maxWidth:480,
+      margin:"0 auto", fontFamily:"'Barlow Condensed',sans-serif", color:"#fff" }}>
+      {/* Header */}
+      <div style={{ background:"#000", borderBottom:"1px solid #111",
+        padding:"11px 16px 9px", position:"sticky", top:0, zIndex:10,
+        display:"flex", alignItems:"center", gap:11 }}>
+        <LogoSVG size={30} />
+        <div>
+          <div style={{ fontSize:17, fontWeight:900, letterSpacing:4, color:"#fff",
+            lineHeight:1, fontFamily:"'Barlow Condensed',sans-serif" }}>COPA MACI</div>
+          <div style={{ fontSize:8, color:"#333", letterSpacing:3 }}>TEMPORADA 2026</div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding:"16px 13px 32px" }}>
+        {view==="home"      && <HomeView allScores={allScores} onNav={setView} />}
+        {view==="scorecard" && <ScorecardView allScores={allScores} onSave={handleSave} onBack={()=>setView("home")} />}
+        {view==="history"   && <HistoryView   allScores={allScores} onDelete={handleDelete} onBack={()=>setView("home")} />}
+        {view==="gira"      && <GiraView onBack={()=>setView("home")} />}
+      </div>
+    </div>
+  );
+}
