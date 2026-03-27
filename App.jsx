@@ -16,6 +16,7 @@ const db = getFirestore(app);
 
 const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
 const MODALIDADES_AAG = ["Medal Play", "Fourball", "Match Play", "Laguneada", "Scramble"];
+const PTS_TABLE = [10, 8, 6, 5, 4, 3]; 
 
 export default function App() {
   const [view, setView] = useState("ranking");
@@ -23,8 +24,6 @@ export default function App() {
   const [scores, setScores] = useState([]);
   const [giraMatches, setGiraMatches] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [giraData, setGiraData] = useState({ equipo: "", modalidad: "", rival: "" });
-
   const [card, setCard] = useState({
     playerId: "", date: "", course: "", otherCourse: "", hcp: 0,
     grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false
@@ -39,22 +38,39 @@ export default function App() {
       setGiraMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
-  const sortScores = (allScores, type = "net") => {
-    return [...allScores].sort((a, b) => {
-      const valA = type === "net" ? (a.totalGross - a.hcp) : a.totalGross;
-      const valB = type === "net" ? (b.totalGross - b.hcp) : b.totalGross;
-      
-      if (valA !== valB) return valA - valB;
-      
-      const gB9A = a.grossHoles.slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
-      const gB9B = b.grossHoles.slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
-      if (gB9A !== gB9B) return gB9A - gB9B;
+  const getAnnualRanking = () => {
+    const playerStats = {};
+    players.forEach(p => { playerStats[p.id] = { ...p, totalPts: 0 }; });
 
-      for (let i = 17; i >= 0; i--) {
-        if (a.grossHoles[i] !== b.grossHoles[i]) return a.grossHoles[i] - b.grossHoles[i];
-      }
-      return 0;
+    const scoresByDate = {};
+    scores.forEach(s => {
+      if (!scoresByDate[s.date]) scoresByDate[s.date] = [];
+      scoresByDate[s.date].push(s);
     });
+
+    Object.values(scoresByDate).forEach(dayScores => {
+      const rankedDay = [...dayScores].sort((a, b) => {
+        if (a.totalNet !== b.totalNet) return a.totalNet - b.totalNet;
+        const gB9A = a.grossHoles.slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
+        const gB9B = b.grossHoles.slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
+        if (gB9A !== gB9B) return gB9A - gB9B;
+        for (let i = 17; i >= 0; i--) {
+          if (a.grossHoles[i] !== b.grossHoles[i]) return a.grossHoles[i] - b.grossHoles[i];
+        }
+        return 0;
+      });
+
+      rankedDay.forEach((s, index) => {
+        if (playerStats[s.playerId]) {
+          let pts = index < 6 ? PTS_TABLE[index] : 2;
+          if (s.longDrive) pts += 1;
+          if (s.bestApproach) pts += 1;
+          playerStats[s.playerId].totalPts += pts;
+        }
+      });
+    });
+
+    return Object.values(playerStats).sort((a, b) => b.totalPts - a.totalPts);
   };
 
   const btnStyle = {
@@ -71,7 +87,7 @@ export default function App() {
 
   const rowStyle = {
     display: 'flex', justifyContent: 'space-between', padding: '12px',
-    borderBottom: '1px solid #1b331b', fontSize: '0.9rem'
+    borderBottom: '1px solid #1b331b', fontSize: '0.9rem', alignItems: 'center'
   };
 
   return (
@@ -90,11 +106,14 @@ export default function App() {
 
       {view === "ranking" && (
         <div>
-          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688', marginBottom: '15px' }}>Leaderboard Anual (Neto)</h2>
-          {sortScores(scores, "net").map((s, i) => (
-            <div key={s.id} style={rowStyle}>
-              <span>{i + 1}. {players.find(p => p.id === s.playerId)?.name || "Jugador"}</span>
-              <span style={{ fontWeight: 'bold' }}>{s.totalNet} Net</span>
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688', marginBottom: '15px' }}>Ranking Anual (Puntos)</h2>
+          {getAnnualRanking().map((p, i) => (
+            <div key={p.id} style={rowStyle}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span>{i + 1}. {p.name}</span>
+                <span style={{ fontSize: '0.65rem', color: '#555' }}>Mat: {p.mat}</span>
+              </div>
+              <span style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#bbf7bb' }}>{p.totalPts} pts</span>
             </div>
           ))}
         </div>
@@ -102,10 +121,10 @@ export default function App() {
 
       {view === "gross" && (
         <div>
-          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688', marginBottom: '15px' }}>Ranking Mejor Gross</h2>
-          {sortScores(scores, "gross").map((s, i) => (
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688', marginBottom: '15px' }}>Ranking Mejor Gross (Día)</h2>
+          {[...scores].sort((a,b) => a.totalGross - b.totalGross).map((s, i) => (
             <div key={s.id} style={rowStyle}>
-              <span>{i + 1}. {players.find(p => p.id === s.playerId)?.name || "Jugador"}</span>
+              <span>{i + 1}. {players.find(p => p.id === s.playerId)?.name}</span>
               <span style={{ fontWeight: 'bold' }}>{s.totalGross} Gross</span>
             </div>
           ))}
@@ -136,23 +155,17 @@ export default function App() {
               <input type="date" required style={inputStyle} onChange={(e) => setCard({...card, date: e.target.value})} />
               <input type="number" placeholder="HCP" style={inputStyle} onChange={(e) => setCard({...card, hcp: e.target.value})} />
             </div>
-            <div style={{ marginTop: '15px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '4px' }}>
-                {card.grossHoles.map((val, i) => (
-                  <input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', margin: 0, fontSize: '0.8rem' }}
-                    onChange={(e) => { const newHoles = [...card.grossHoles]; newHoles[i] = e.target.value; setCard({...card, grossHoles: newHoles}); }} />
-                ))}
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '4px', marginTop: '10px' }}>
+              {card.grossHoles.map((val, i) => (
+                <input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', margin: 0, fontSize: '0.8rem' }}
+                  onChange={(e) => { const newHoles = [...card.grossHoles]; newHoles[i] = e.target.value; setCard({...card, grossHoles: newHoles}); }} />
+              ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-around', margin: '20px 0' }}>
-              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <input type="checkbox" onChange={(e) => setCard({...card, longDrive: e.target.checked})} /> Long Drive
-              </label>
-              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <input type="checkbox" onChange={(e) => setCard({...card, bestApproach: e.target.checked})} /> Best Approach
-              </label>
+              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}><input type="checkbox" onChange={(e) => setCard({...card, longDrive: e.target.checked})} /> Long Drive</label>
+              <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}><input type="checkbox" onChange={(e) => setCard({...card, bestApproach: e.target.checked})} /> Best Approach</label>
             </div>
-            <button type="submit" style={{ ...btnStyle, width: '100%', padding: '12px', fontSize: '0.9rem', justifyContent: 'center' }}>⛳ GUARDAR TARJETA</button>
+            <button type="submit" style={{ ...btnStyle, width: '100%', padding: '12px', fontSize: '0.9rem', justifyContent: 'center' }}>⛳ GUARDAR</button>
           </form>
         </div>
       )}
@@ -164,46 +177,36 @@ export default function App() {
             <div style={{ fontSize: '1.5rem', alignSelf: 'center' }}>VS</div>
             <div style={{ textAlign: 'center' }}><h3>LDS</h3><p style={{ fontSize: '2rem', margin: 0 }}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
-          <select style={inputStyle} onChange={(e) => setGiraData({...giraData, equipo: e.target.value})}>
-            <option>Elegí equipo</option>
-            <option value="RDM">RDM</option>
-            <option value="LDS">LDS</option>
-          </select>
-          <select style={inputStyle} onChange={(e) => setGiraData({...giraData, modalidad: e.target.value})}>
-            {MODALIDADES_AAG.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <button style={{ ...btnStyle, width: '100%', marginTop: '10px', justifyContent: 'center' }}>+ Nuevo Partido</button>
+          <button onClick={async () => {
+            const w = prompt("Ganador (RDM, LDS o Empate):");
+            if(w) await addDoc(collection(db, "gira"), { winner: w, createdAt: serverTimestamp() });
+          }} style={{ ...btnStyle, width: '100%', justifyContent: 'center' }}>+ Cargar Resultado Gira</button>
         </div>
       )}
 
       {view === "admin" && isAdmin && (
         <div style={{ background: '#0f0f0f', padding: '15px', borderRadius: '15px' }}>
-          <h3>Gestionar Jugadores</h3>
           <form onSubmit={async (e) => {
             e.preventDefault();
-            const n = e.target.name.value;
-            const m = e.target.mat.value;
-            await addDoc(collection(db, "players"), { name: n, mat: m });
+            await addDoc(collection(db, "players"), { name: e.target.name.value, mat: e.target.mat.value });
             e.target.reset();
           }}>
-            <input name="name" placeholder="Nombre y Apellido" style={inputStyle} required />
+            <input name="name" placeholder="Nombre" style={inputStyle} required />
             <input name="mat" placeholder="Matrícula" style={inputStyle} required />
-            <button type="submit" style={{ ...btnStyle, width: '100%' }}>Agregar Jugador</button>
+            <button type="submit" style={{ ...btnStyle, width: '100%' }}>+ Jugador</button>
           </form>
-          <div style={{ marginTop: '20px' }}>
-            {players.map(p => (
-              <div key={p.id} style={rowStyle}>
-                <span>{p.name} ({p.mat})</span>
-                <button onClick={() => deleteDoc(doc(db, "players", p.id))} style={{ background: 'red', border: 'none', color: 'white', borderRadius: '5px' }}>X</button>
-              </div>
-            ))}
-          </div>
+          {players.map(p => (
+            <div key={p.id} style={rowStyle}>
+              <span>{p.name}</span>
+              <button onClick={() => deleteDoc(doc(db, "players", p.id))} style={{ background: 'red', border: 'none', color: 'white', borderRadius: '5px', padding: '2px 8px' }}>X</button>
+            </div>
+          ))}
         </div>
       )}
 
       <footer style={{ marginTop: '60px', textAlign: 'center' }}>
         {!isAdmin ? (
-          <button onClick={() => prompt("PIN Admin:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#222', fontSize: '0.6rem' }}>Config</button>
+          <button onClick={() => prompt("PIN:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#222', fontSize: '0.6rem' }}>Config</button>
         ) : (
           <button onClick={() => setView("admin")} style={{ ...btnStyle, margin: '0 auto' }}>Panel Admin</button>
         )}
