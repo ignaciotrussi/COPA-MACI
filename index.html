@@ -4,13 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Copa Maci 2026</title>
-    <!-- Esto ayuda a que se vea bien como App en el celular -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#1a2e1a">
+    <meta name="theme-color" content="#0a1a0a">
+    <style>
+      /* Forzamos el fondo oscuro desde el HTML para que no haya destellos blancos */
+      html, body { 
+        margin: 0; 
+        padding: 0;
+        background-color: #0a1a0a; 
+        color: white;
+        font-family: sans-serif;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <!-- AJUSTE AQUÍ: Si main.jsx está en la raíz, quita el 'src/' -->
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/main.jsx"></script>
   </body>
 </html>
