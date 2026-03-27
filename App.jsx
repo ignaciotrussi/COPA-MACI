@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "firebase/firestore";
 
-// --- CONFIGURACIÓN FIREBASE ---
+// --- FIREBASE ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,113 +14,80 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- CONSTANTES ---
-const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
-const MODALITIES = ["Medal Play", "Fourball", "Match Play", "Stableford"];
+const MODALIDADES_AAG = ["Medal Play", "Fourball", "Match Play", "Laguneada", "Scramble"];
 
 export default function App() {
-  const [view, setView] = useState("ranking"); // ranking, card, gira, admin
-  const [players, setPlayers] = useState([]);
-  const [scores, setScores] = useState([]);
-  const [giraMatches, setGiraMatches] = useState([]);
+  const [view, setView] = useState("ranking"); 
   const [isAdmin, setIsAdmin] = useState(false);
-  
-  // States para Formularios
-  const [card, setCard] = useState({ 
-    playerId: "", date: "", course: "", otherCourse: "", hcp: 0, 
-    grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false 
-  });
 
-  // Listeners Firebase
-  useEffect(() => {
-    onSnapshot(query(collection(db, "players"), orderBy("name")), (s) => 
-      setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    onSnapshot(query(collection(db, "scores"), orderBy("createdAt", "desc")), (s) => 
-      setScores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    onSnapshot(collection(db, "gira"), (s) => 
-      setGiraMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-  }, []);
-
-  // --- LÓGICA DE DESEMPATE ---
-  const sortScores = (allScores) => {
-    return [...allScores].sort((a, b) => {
-      const netA = a.grossHoles.reduce((s, h) => s + h, 0) - a.hcp;
-      const netB = b.grossHoles.reduce((s, h) => s + h, 0) - b.hcp;
-      if (netA !== netB) return netA - netB;
-      
-      // Empate: Gross Back 9 (Hoyos 10-18)
-      const gB9A = a.grossHoles.slice(9).reduce((s, h) => s + h, 0);
-      const gB9B = b.grossHoles.slice(9).reduce((s, h) => s + h, 0);
-      if (gB9A !== gB9B) return gB9A - gB9B;
-
-      // Empate: Neto hoyo x hoyo desde el 18 (Sin hándicap por hoyo como pediste)
-      for (let i = 17; i >= 0; i--) {
-        if (a.grossHoles[i] !== b.grossHoles[i]) return a.grossHoles[i] - b.grossHoles[i];
-      }
-      return 0;
-    });
+  // Estilo de botones: 20% más chicos, verde oscuro, sin bordes claros
+  const btnStyle = {
+    background: '#1b331b', 
+    color: '#e0e0e0', 
+    border: '1px solid #2d4a2d', 
+    padding: '6px 10px', 
+    borderRadius: '12px', 
+    fontSize: '0.7rem', 
+    cursor: 'pointer', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '4px'
   };
 
-  // --- RENDERS ---
+  // Estilo de inputs/selects: Oscuros
+  const inputStyle = {
+    width: '100%',
+    padding: '10px',
+    margin: '8px 0',
+    background: '#1a1a1a',
+    border: '1px solid #333',
+    color: 'white',
+    borderRadius: '8px',
+    fontSize: '0.9rem'
+  };
+
   return (
-    <div style={{ background: '#0f1a0f', color: 'white', minHeight: '100vh', padding: '15px', fontFamily: 'sans-serif' }}>
-      <header style={{ textAlign: 'center', marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '1.5rem', letterSpacing: '2px' }}>COPA MACI 2026</h1>
+    <div style={{ background: '#0a1a0a', color: 'white', minHeight: '100vh', padding: '20px' }}>
+      <header style={{ textAlign: 'center', marginBottom: '30px' }}>
+        <h1 style={{ fontSize: '1.4rem', letterSpacing: '1px', color: '#f0f0f0' }}>⛳ COPA MACI 2026</h1>
+        <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #2d4a2d, transparent)', marginTop: '10px' }}></div>
       </header>
 
-      {/* BOTONES PRINCIPALES (20% más chicos) */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+      <nav style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '30px' }}>
         <button onClick={() => setView("card")} style={btnStyle}>⛳ Cargar</button>
         <button onClick={() => setView("ranking")} style={btnStyle}>⛳ Ranking</button>
         <button onClick={() => setView("gira")} style={btnStyle}>⛳ Gira</button>
-      </div>
+      </nav>
 
-      {/* VISTA RANKING ANUAL */}
-      {view === "ranking" && (
-        <div>
-          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a' }}>Leaderboard Anual</h2>
-          {sortScores(scores).map((s, i) => (
-            <div key={s.id} style={rowStyle}>
-              <span>{i + 1}. {players.find(p => p.id === s.playerId)?.name}</span>
-              <span style={{ fontWeight: 'bold' }}>{s.grossHoles.reduce((sum, h) => sum + h, 0) - s.hcp} Net</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* MODO GIRA (RDM vs LDS) */}
       {view === "gira" && (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', background: '#222', padding: '15px', borderRadius: '10px' }}>
-            <div><h3>RDM</h3><p style={{ fontSize: '2rem' }}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'RDM' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
-            <div style={{ fontSize: '1.5rem', alignSelf: 'center' }}>VS</div>
-            <div><h3>LDS</h3><p style={{ fontSize: '2rem' }}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
-          </div>
-          <button style={{ ...btnStyle, marginTop: '20px' }}>+ Nuevo Partido Gira</button>
+        <div style={{ background: '#0f0f0f', padding: '20px', borderRadius: '15px', border: '1px solid #1b331b' }}>
+          <h2 style={{ fontSize: '1rem', marginBottom: '15px', color: '#88a688' }}>Modo Gira: RDM vs LDS</h2>
+          <select style={inputStyle}>
+            <option>Elegí tu equipo</option>
+            <option value="RDM">RDM</option>
+            <option value="LDS">LDS</option>
+          </select>
+          <select style={inputStyle}>
+            <option>Modalidad AAG</option>
+            {MODALIDADES_AAG.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <p style={{ marginTop: '20px', fontSize: '0.75rem', color: '#555', textAlign: 'center' }}>
+            Independiente del Torneo Anual
+          </p>
         </div>
       )}
 
-      {/* SECCIÓN ADMIN IGNACIO */}
-      <footer style={{ marginTop: '40px', borderTop: '1px solid #333', paddingTop: '10px', textAlign: 'center' }}>
-        {!isAdmin ? (
-          <button onClick={() => prompt("PIN Admin:") === "1234" && setIsAdmin(true)} style={{ background: 'none', color: '#555', border: 'none' }}>Admin Access</button>
-        ) : (
-          <div>
-            <p>Hola Ignacio! [Admin Mode]</p>
-            <button onClick={() => setView("admin")} style={btnStyle}>Gestionar Jugadores</button>
-          </div>
+      {/* Footer Admin muy sutil */}
+      <footer style={{ marginTop: '60px', textAlign: 'center' }}>
+        {!isAdmin && (
+          <button 
+            onClick={() => prompt("PIN de Admin:") === "1234" && setIsAdmin(true)} 
+            style={{ background: 'none', border: 'none', color: '#222', fontSize: '0.6rem' }}
+          >
+            Config
+          </button>
         )}
       </footer>
     </div>
   );
 }
-
-const btnStyle = {
-  background: '#2e4d2e', color: 'white', border: 'none', padding: '8px 12px',
-  borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
-};
-
-const rowStyle = {
-  display: 'flex', justifyContent: 'space-between', padding: '12px',
-  borderBottom: '1px solid #222', fontSize: '0.9rem'
-};
