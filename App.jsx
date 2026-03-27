@@ -45,7 +45,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  const [giraForm, setGiraForm] = useState({ team: "", modality: "", p1: "", p2: "", rival1: "", rival2: "" });
+  const [giraForm, setGiraForm] = useState({ team: "", modality: "", p1: "" });
   const [card, setCard] = useState({ playerId: "", date: "", course: "", otherCourse: "", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false });
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export default function App() {
   const btnStyle = { background: '#1b331b', color: '#e0e0e0', border: '1px solid #2d4a2d', padding: '6px 10px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' };
   const inputStyle = { width: '100%', padding: '10px', margin: '8px 0', background: '#111', border: '1px solid #333', color: 'white', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' };
 
-  if (loading) return <div style={{background:'#000', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Cargando Copa Maci...</div>;
+  if (loading) return <div style={{background:'#000', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Copa Maci...</div>;
 
   return (
     <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '20px', boxSizing: 'border-box' }}>
@@ -112,7 +112,6 @@ export default function App() {
 
       {view === "ranking" && (
         <div>
-          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688' }}>Leaderboard (Puntos)</h2>
           {getAnnualRanking().map((p, i) => (
             <div key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
               <div><div>{i + 1}. {p.name}</div><div style={{fontSize:'0.65rem', color:'#555'}}>Mat: {p.mat}</div></div>
@@ -124,7 +123,6 @@ export default function App() {
 
       {view === "gross" && (
         <div>
-          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688' }}>Ranking Mejor Gross</h2>
           {[...scores].sort((a,b) => (a.totalGross || 0) - (b.totalGross || 0)).map((s, i) => (
             <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
               <span>{players.find(p => p.id === s.playerId)?.name || "---"}</span>
@@ -136,23 +134,11 @@ export default function App() {
 
       {view === "card" && (
         <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
-          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); alert("Guardado"); setView("ranking"); }}>
-            <select required style={inputStyle} onChange={e => setCard({...card, playerId: e.target.value})}>
-              <option value="">Jugador</option>
-              {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); setView("ranking"); }}>
+            <select required style={inputStyle} onChange={e => setCard({...card, playerId: e.target.value})}><option value="">Jugador</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <div style={{display:'flex', gap:'5px'}}><input type="date" required style={inputStyle} onChange={e => setCard({...card, date: e.target.value})} /><input type="number" placeholder="HCP" style={inputStyle} onChange={e => setCard({...card, hcp: e.target.value})} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '3px' }}>
-              {card.grossHoles.map((v, i) => (
-                <input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', fontSize: '0.7rem' }}
-                  onChange={e => { const nh = [...card.grossHoles]; nh[i] = e.target.value; setCard({...card, grossHoles: nh}); }} />
-              ))}
-            </div>
-            <div style={{display:'flex', justifyContent:'space-around', marginTop:'15px'}}>
-               <label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, longDrive: e.target.checked})} /> Long Drive</label>
-               <label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, bestApproach: e.target.checked})} /> Approach</label>
-            </div>
-            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR TARJETA</button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '3px' }}>{card.grossHoles.map((v, i) => (<input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', fontSize: '0.7rem' }} onChange={e => { const nh = [...card.grossHoles]; nh[i] = e.target.value; setCard({...card, grossHoles: nh}); }} />))}</div>
+            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR</button>
           </form>
         </div>
       )}
@@ -164,29 +150,21 @@ export default function App() {
             <div style={{fontSize:'1.5rem', alignSelf:'center'}}>VS</div>
             <div style={{textAlign:'center'}}><h3>LDS</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
-          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}>
-            <option value="">Tu Equipo</option><option value="RDM">RDM</option><option value="LDS">LDS</option>
-          </select>
-          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, modality: e.target.value})}>
-            {MODALIDADES_AAG.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
-            <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { ...giraForm, winner: giraForm.team, createdAt: serverTimestamp() }); alert("Ganó " + giraForm.team); } }} style={{...btnStyle, flex:1, justifyContent:'center', background:'#2e4d2e'}}>Ganamos (1pt)</button>
-            <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { ...giraForm, winner: "Empate", createdAt: serverTimestamp() }); alert("Empate"); } }} style={{...btnStyle, flex:1, justifyContent:'center'}}>Empate (0.5)</button>
-          </div>
+          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}><option value="">Ganador</option><option value="RDM">RDM</option><option value="LDS">LDS</option><option value="Empate">Empate</option></select>
+          <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { winner: giraForm.team, createdAt: serverTimestamp() }); } }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>Cargar Punto</button>
         </div>
       )}
 
       {view === "admin" && isAdmin && (
-        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px' }}>
-          <form onSubmit={async (e) => { e.preventDefault(); await addDoc(collection(db, "players"), { name: e.target.name.value, mat: e.target.mat.value }); e.target.reset(); }}>
-            <input name="name" placeholder="Nombre" style={inputStyle} required /><input name="mat" placeholder="Matrícula" style={inputStyle} required />
-            <button type="submit" style={{...btnStyle, width:'100%', justifyContent:'center'}}>+ Agregar Jugador</button>
+        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid maroon' }}>
+          <h3 style={{color:'maroon'}}>Panel Admin</h3>
+          <form onSubmit={async (e) => { e.preventDefault(); await addDoc(collection(db, "players"), { name: e.target.n.value, mat: e.target.m.value }); e.target.reset(); }}>
+            <input name="n" placeholder="Nombre" style={inputStyle} required /><input name="m" placeholder="Matricula" style={inputStyle} required /><button type="submit" style={btnStyle}>+ Jugador</button>
           </form>
-          <h4 style={{marginTop:'20px'}}>Gestionar Jugadores / Tarjetas</h4>
-          {players.map(p => <div key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'5px'}}>{p.name} <button onClick={()=>deleteDoc(doc(db,"players",p.id))} style={{background:'red', border:'none', color:'white', borderRadius:'4px'}}>X</button></div>)}
-          <hr style={{opacity:0.1}}/>
-          {scores.map(s => <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'5px', fontSize:'0.7rem'}}>{s.date} - {players.find(p=>p.id===s.playerId)?.name} <button onClick={()=>deleteDoc(doc(db,"scores",s.id))} style={{background:'red', border:'none', color:'white', borderRadius:'4px'}}>X</button></div>)}
+          <h4 style={{marginTop:'20px'}}>Jugadores</h4>
+          {players.map(p => <div key={p.id} style={rowStyle}><span>{p.name}</span><button onClick={()=>deleteDoc(doc(db,"players",p.id))} style={{background:'red', color:'white', border:'none', borderRadius:'4px'}}>Borrar</button></div>)}
+          <h4 style={{marginTop:'20px'}}>Tarjetas</h4>
+          {scores.map(s => <div key={s.id} style={rowStyle}><span>{s.date} - {players.find(p=>p.id===s.playerId)?.name}</span><button onClick={()=>deleteDoc(doc(db,"scores",s.id))} style={{background:'red', color:'white', border:'none', borderRadius:'4px'}}>X</button></div>)}
         </div>
       )}
 
