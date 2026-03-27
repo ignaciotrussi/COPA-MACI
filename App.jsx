@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { 
-  getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp 
-} from "firebase/firestore";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
 
-// --- CONFIGURACIÓN FIREBASE (Usa tus variables de entorno) ---
+// --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,99 +15,112 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // --- CONSTANTES ---
-const ADMIN_PIN = "1234"; // Cambiá esto por tu PIN de 4 dígitos, Ignacio.
 const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
-
-// --- LÓGICA DE DESEMPATE ---
-const calculateWinner = (a, b) => {
-  // 1. Mejor Score Neto Total
-  if (a.totalNet !== b.totalNet) return a.totalNet - b.totalNet;
-  
-  // 2. Empate en Neto -> Mejor Gross Vuelta (10-18)
-  const grossBack9A = a.grossHoles.slice(9).reduce((s, h) => s + h, 0);
-  const grossBack9B = b.grossHoles.slice(9).reduce((s, h) => s + h, 0);
-  if (grossBack9A !== grossBack9B) return grossBack9A - grossBack9B;
-
-  // 3. Persiste empate -> Neto hoyo por hoyo desde el 18 hacia atrás
-  for (let i = 17; i >= 0; i--) {
-    if (a.netHoles[i] !== b.netHoles[i]) return a.netHoles[i] - b.netHoles[i];
-  }
-  return 0;
-};
+const MODALITIES = ["Medal Play", "Fourball", "Match Play", "Stableford"];
 
 export default function App() {
-  const [players, setPlayers] = useState([]); // Cargalos desde Firebase o usá tu lista
+  const [view, setView] = useState("ranking"); // ranking, card, gira, admin
+  const [players, setPlayers] = useState([]);
   const [scores, setScores] = useState([]);
+  const [giraMatches, setGiraMatches] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-
-  // Formulario State
-  const [formData, setFormData] = useState({
-    playerId: "", date: "", course: "", otherCourse: "", hcp: 0,
-    grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false
+  
+  // States para Formularios
+  const [card, setCard] = useState({ 
+    playerId: "", date: "", course: "", otherCourse: "", hcp: 0, 
+    grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false 
   });
 
-  // Listener de Firebase
+  // Listeners Firebase
   useEffect(() => {
-    const q = query(collection(db, "tournament_scores"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (snap) => {
-      setScores(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    onSnapshot(query(collection(db, "players"), orderBy("name")), (s) => 
+      setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    onSnapshot(query(collection(db, "scores"), orderBy("createdAt", "desc")), (s) => 
+      setScores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    onSnapshot(collection(db, "gira"), (s) => 
+      setGiraMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
 
-  const handleAdminAuth = () => {
-    const pin = prompt("Ingresá el PIN de Administrador:");
-    if (pin === ADMIN_PIN) setIsAdmin(true);
-    else alert("PIN Incorrecto");
-  };
+  // --- LÓGICA DE DESEMPATE ---
+  const sortScores = (allScores) => {
+    return [...allScores].sort((a, b) => {
+      const netA = a.grossHoles.reduce((s, h) => s + h, 0) - a.hcp;
+      const netB = b.grossHoles.reduce((s, h) => s + h, 0) - b.hcp;
+      if (netA !== netB) return netA - netB;
+      
+      // Empate: Gross Back 9 (Hoyos 10-18)
+      const gB9A = a.grossHoles.slice(9).reduce((s, h) => s + h, 0);
+      const gB9B = b.grossHoles.slice(9).reduce((s, h) => s + h, 0);
+      if (gB9A !== gB9B) return gB9A - gB9B;
 
-  const saveScore = async (e) => {
-    e.preventDefault();
-    // Aquí calculamos el neto de cada hoyo restando el hcp distribuido (simplificado o manual)
-    const netHoles = formData.grossHoles.map(g => g); // Lógica de hcp por hoyo va aquí
-    const totalNet = netHoles.reduce((s, h) => s + h, 0);
-
-    await addDoc(collection(db, "tournament_scores"), {
-      ...formData,
-      totalNet,
-      netHoles,
-      createdAt: serverTimestamp()
+      // Empate: Neto hoyo x hoyo desde el 18 (Sin hándicap por hoyo como pediste)
+      for (let i = 17; i >= 0; i--) {
+        if (a.grossHoles[i] !== b.grossHoles[i]) return a.grossHoles[i] - b.grossHoles[i];
+      }
+      return 0;
     });
-    setShowForm(false);
   };
 
+  // --- RENDERS ---
   return (
-    <div style={{ padding: '20px', background: '#1a2e1a', color: 'white', minHeight: '100vh' }}>
-      <header style={{ textAlign: 'center' }}>
-        <h1>COPA MACI 2026</h1>
-        <p>Ranking Dinámico</p>
+    <div style={{ background: '#0f1a0f', color: 'white', minHeight: '100vh', padding: '15px', fontFamily: 'sans-serif' }}>
+      <header style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <h1 style={{ fontSize: '1.5rem', letterSpacing: '2px' }}>COPA MACI 2026</h1>
       </header>
 
-      {/* LISTADO DE RANKING (Ordenado por tu lógica de desempate) */}
-      <section>
-        {/* Aquí mapeamos los scores usando la función calculateWinner */}
-      </section>
-
-      {/* BOTONES CON LOGO PELOTA (20% más chicos) */}
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
-        <button onClick={() => setShowForm(true)} style={{ fontSize: '0.8rem' }}>
-          ⛳ Cargar Tarjeta
-        </button>
-        <button style={{ fontSize: '0.8rem' }}>⛳ Ranking Gross</button>
-        <button style={{ fontSize: '0.8rem' }}>⛳ Modo Gira</button>
+      {/* BOTONES PRINCIPALES (20% más chicos) */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+        <button onClick={() => setView("card")} style={btnStyle}>⛳ Cargar</button>
+        <button onClick={() => setView("ranking")} style={btnStyle}>⛳ Ranking</button>
+        <button onClick={() => setView("gira")} style={btnStyle}>⛳ Gira</button>
       </div>
 
-      {/* SECCIÓN ADMIN */}
-      <footer style={{ marginTop: '50px', textAlign: 'center' }}>
+      {/* VISTA RANKING ANUAL */}
+      {view === "ranking" && (
+        <div>
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a' }}>Leaderboard Anual</h2>
+          {sortScores(scores).map((s, i) => (
+            <div key={s.id} style={rowStyle}>
+              <span>{i + 1}. {players.find(p => p.id === s.playerId)?.name}</span>
+              <span style={{ fontWeight: 'bold' }}>{s.grossHoles.reduce((sum, h) => sum + h, 0) - s.hcp} Net</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MODO GIRA (RDM vs LDS) */}
+      {view === "gira" && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-around', background: '#222', padding: '15px', borderRadius: '10px' }}>
+            <div><h3>RDM</h3><p style={{ fontSize: '2rem' }}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'RDM' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
+            <div style={{ fontSize: '1.5rem', alignSelf: 'center' }}>VS</div>
+            <div><h3>LDS</h3><p style={{ fontSize: '2rem' }}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
+          </div>
+          <button style={{ ...btnStyle, marginTop: '20px' }}>+ Nuevo Partido Gira</button>
+        </div>
+      )}
+
+      {/* SECCIÓN ADMIN IGNACIO */}
+      <footer style={{ marginTop: '40px', borderTop: '1px solid #333', paddingTop: '10px', textAlign: 'center' }}>
         {!isAdmin ? (
-          <button onClick={handleAdminAuth}>Admin Login</button>
+          <button onClick={() => prompt("PIN Admin:") === "1234" && setIsAdmin(true)} style={{ background: 'none', color: '#555', border: 'none' }}>Admin Access</button>
         ) : (
           <div>
-            <p>Hola Ignacio</p>
-            <button>+ Agregar Jugador</button>
+            <p>Hola Ignacio! [Admin Mode]</p>
+            <button onClick={() => setView("admin")} style={btnStyle}>Gestionar Jugadores</button>
           </div>
         )}
       </footer>
     </div>
   );
 }
+
+const btnStyle = {
+  background: '#2e4d2e', color: 'white', border: 'none', padding: '8px 12px',
+  borderRadius: '20px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
+};
+
+const rowStyle = {
+  display: 'flex', justifyContent: 'space-between', padding: '12px',
+  borderBottom: '1px solid #222', fontSize: '0.9rem'
+};
