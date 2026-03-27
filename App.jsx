@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, getDocs } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,9 +14,23 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+const INITIAL_PLAYERS = [
+  { name: "Esteban Chicco", mat: "56229" },
+  { name: "Juan José Hardoy", mat: "112534" },
+  { name: "Manuel Gosende", mat: "175387" },
+  { name: "Rodrigo López Martínez", mat: "132679" },
+  { name: "Ignacio Trussi", mat: "46215" },
+  { name: "Andrés Torres Carbonell", mat: "52274" },
+  { name: "Federico Procaccini", mat: "121277" },
+  { name: "Ignacio Macías", mat: "45585" },
+  { name: "Mariano Bustillo", mat: "119275" },
+  { name: "Carlos Segundo Morixe", mat: "119372" },
+  { name: "Francisco Goldaracena", mat: "173455" }
+];
+
 const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
 const MODALIDADES_AAG = ["Medal Play", "Fourball", "Match Play", "Laguneada", "Scramble"];
-const PTS_TABLE = [10, 8, 6, 5, 4, 3]; // Puntos fijos para el ranking
+const PTS_TABLE = [10, 8, 6, 5, 4, 3]; // Puntos para posiciones 1 a 6
 
 export default function App() {
   const [view, setView] = useState("ranking");
@@ -25,13 +39,19 @@ export default function App() {
   const [giraMatches, setGiraMatches] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  
-  const [card, setCard] = useState({
-    playerId: "", date: "", course: "", otherCourse: "", hcp: 0,
-    grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false
-  });
+  const [card, setCard] = useState({ playerId: "", date: "", course: "", otherCourse: "", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false });
 
   useEffect(() => {
+    const initApp = async () => {
+      const pSnap = await getDocs(collection(db, "players"));
+      if (pSnap.empty) {
+        for (const p of INITIAL_PLAYERS) {
+          await addDoc(collection(db, "players"), p);
+        }
+      }
+    };
+    initApp();
+
     const unsubPlayers = onSnapshot(query(collection(db, "players"), orderBy("name")), (s) => {
       setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
@@ -40,19 +60,15 @@ export default function App() {
       setScores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubGira = onSnapshot(collection(db, "gira"), (s) =>
       setGiraMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+
     return () => { unsubPlayers(); unsubScores(); unsubGira(); };
   }, []);
 
   const getAnnualRanking = () => {
-    if (players.length === 0) return [];
     const stats = {};
     players.forEach(p => { stats[p.id] = { ...p, totalPts: 0 }; });
-
     const byDate = {};
-    scores.forEach(s => {
-      if (!byDate[s.date]) byDate[s.date] = [];
-      byDate[s.date].push(s);
-    });
+    scores.forEach(s => { if (!byDate[s.date]) byDate[s.date] = []; byDate[s.date].push(s); });
 
     Object.values(byDate).forEach(dayScores => {
       const rankedDay = [...dayScores].sort((a, b) => {
@@ -63,12 +79,12 @@ export default function App() {
         const gB9B = (b.grossHoles || []).slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
         if (gB9A !== gB9B) return gB9A - gB9B;
         for (let i = 17; i >= 0; i--) {
-          if ((a.grossHoles?.[i] || 0) !== (b.grossHoles?.[i] || 0)) 
-            return (a.grossHoles?.[i] || 0) - (b.grossHoles?.[i] || 0);
+          const valA = parseInt(a.grossHoles?.[i]) || 0;
+          const valB = parseInt(b.grossHoles?.[i]) || 0;
+          if (valA !== valB) return valA - valB;
         }
         return 0;
       });
-
       rankedDay.forEach((s, idx) => {
         if (stats[s.playerId]) {
           let p = idx < 6 ? PTS_TABLE[idx] : 2;
@@ -106,10 +122,7 @@ export default function App() {
           <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688', marginBottom: '15px' }}>Ranking Anual (Puntos)</h2>
           {getAnnualRanking().map((p, i) => (
             <div key={p.id} style={rowStyle}>
-              <div>
-                <div style={{ fontWeight: 'bold' }}>{i + 1}. {p.name}</div>
-                <div style={{ fontSize: '0.65rem', color: '#555' }}>Mat: {p.mat}</div>
-              </div>
+              <div><div style={{ fontWeight: 'bold' }}>{i + 1}. {p.name}</div><div style={{ fontSize: '0.65rem', color: '#555' }}>Mat: {p.mat}</div></div>
               <div style={{ fontWeight: 'bold', color: '#bbf7bb', fontSize: '1.1rem' }}>{p.totalPts} pts</div>
             </div>
           ))}
@@ -142,8 +155,10 @@ export default function App() {
               {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <select required style={inputStyle} onChange={(e) => setCard({...card, course: e.target.value})}>
+              <option value="">Elegí Cancha</option>
               {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {card.course === "Otro" && <input placeholder="Nombre de la cancha" style={inputStyle} onChange={(e) => setCard({...card, otherCourse: e.target.value})} />}
             <div style={{ display: 'flex', gap: '5px' }}>
               <input type="date" required style={inputStyle} onChange={(e) => setCard({...card, date: e.target.value})} />
               <input type="number" placeholder="HCP" style={inputStyle} onChange={(e) => setCard({...card, hcp: e.target.value})} />
@@ -176,31 +191,14 @@ export default function App() {
         </div>
       )}
 
-      {view === "admin" && isAdmin && (
-        <div style={{ background: '#0f0f0f', padding: '15px', borderRadius: '15px' }}>
-          <form onSubmit={async (e) => {
-            e.preventDefault();
-            await addDoc(collection(db, "players"), { name: e.target.name.value, mat: e.target.mat.value });
-            e.target.reset();
-          }}>
-            <input name="name" placeholder="Nombre y Apellido" style={inputStyle} required />
-            <input name="mat" placeholder="Matrícula" style={inputStyle} required />
-            <button type="submit" style={{...btnStyle, width:'100%', justifyContent:'center'}}>+ Jugador</button>
-          </form>
-          {players.map(p => (
-            <div key={p.id} style={rowStyle}>
-              <span>{p.name} ({p.mat})</span>
-              <button onClick={() => deleteDoc(doc(db, "players", p.id))} style={{ background: 'red', border: 'none', color: 'white', borderRadius: '5px' }}>Borrar</button>
-            </div>
-          ))}
-        </div>
-      )}
-
       <footer style={{ marginTop: '60px', textAlign: 'center' }}>
         {!isAdmin ? (
           <button onClick={() => prompt("PIN Admin:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#111' }}>.</button>
         ) : (
-          <button onClick={() => setView("admin")} style={{ ...btnStyle, margin: '0 auto' }}>Panel Admin</button>
+          <div style={{display:'flex', flexDirection:'column', gap:'10px', alignItems:'center'}}>
+             <button onClick={() => setView("admin")} style={btnStyle}>Panel Jugadores</button>
+             <button onClick={() => setIsAdmin(false)} style={{...btnStyle, background:'maroon'}}>Salir Admin</button>
+          </div>
         )}
       </footer>
     </div>
