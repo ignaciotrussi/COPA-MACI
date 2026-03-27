@@ -42,10 +42,7 @@ export default function App() {
   const [players, setPlayers] = useState([]);
   const [scores, setScores] = useState([]);
   const [giraMatches, setGiraMatches] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  
-  const [giraForm, setGiraForm] = useState({ team: "", modality: "", p1: "" });
   const [card, setCard] = useState({ playerId: "", date: "", course: "", otherCourse: "", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false });
 
   useEffect(() => {
@@ -58,6 +55,8 @@ export default function App() {
     onSnapshot(query(collection(db, "scores"), orderBy("createdAt", "desc")), (s) => setScores(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     onSnapshot(collection(db, "gira"), (s) => setGiraMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, []);
+
+  const checkAdmin = () => prompt("PIN de Administrador:") === "1234";
 
   const getAnnualRanking = () => {
     const stats = {};
@@ -115,9 +114,18 @@ export default function App() {
           {getAnnualRanking().map((p, i) => (
             <div key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
               <div><div>{i + 1}. {p.name}</div><div style={{fontSize:'0.65rem', color:'#555'}}>Mat: {p.mat}</div></div>
-              <div style={{fontWeight:'bold', color:'#bbf7bb'}}>{p.totalPts} pts</div>
+              <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                <div style={{fontWeight:'bold', color:'#bbf7bb'}}>{p.totalPts} pts</div>
+                <button onClick={() => { if(checkAdmin()) deleteDoc(doc(db, "players", p.id)); }} style={{background:'none', border:'none', color:'maroon', fontSize:'0.7rem'}}>×</button>
+              </div>
             </div>
           ))}
+          <button onClick={() => {
+            if(checkAdmin()) {
+              const n = prompt("Nombre:"); const m = prompt("Matrícula:");
+              if(n && m) addDoc(collection(db, "players"), { name: n, mat: m });
+            }
+          }} style={{...btnStyle, margin:'20px auto', display:'block'}}>+ Agregar / Quitar Jugador</button>
         </div>
       )}
 
@@ -125,8 +133,8 @@ export default function App() {
         <div>
           {[...scores].sort((a,b) => (a.totalGross || 0) - (b.totalGross || 0)).map((s, i) => (
             <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
-              <span>{players.find(p => p.id === s.playerId)?.name || "---"}</span>
-              <span style={{fontWeight:'bold'}}>{s.totalGross} G</span>
+              <span>{players.find(p => p.id === s.playerId)?.name || "---"} ({s.totalGross} G)</span>
+              <button onClick={() => { if(checkAdmin()) deleteDoc(doc(db, "scores", s.id)); }} style={{background:'maroon', color:'white', border:'none', borderRadius:'4px', padding:'2px 8px', fontSize:'0.6rem'}}>Borrar Tarjeta</button>
             </div>
           ))}
         </div>
@@ -134,11 +142,12 @@ export default function App() {
 
       {view === "card" && (
         <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
-          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); setView("ranking"); }}>
+          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); alert("Guardado"); setView("ranking"); }}>
             <select required style={inputStyle} onChange={e => setCard({...card, playerId: e.target.value})}><option value="">Jugador</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <div style={{display:'flex', gap:'5px'}}><input type="date" required style={inputStyle} onChange={e => setCard({...card, date: e.target.value})} /><input type="number" placeholder="HCP" style={inputStyle} onChange={e => setCard({...card, hcp: e.target.value})} /></div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '3px' }}>{card.grossHoles.map((v, i) => (<input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', fontSize: '0.7rem' }} onChange={e => { const nh = [...card.grossHoles]; nh[i] = e.target.value; setCard({...card, grossHoles: nh}); }} />))}</div>
-            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR</button>
+            <div style={{display:'flex', justifyContent:'space-around', marginTop:'15px'}}><label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, longDrive: e.target.checked})} /> Long Drive</label><label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, bestApproach: e.target.checked})} /> Approach</label></div>
+            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR TARJETA</button>
           </form>
         </div>
       )}
@@ -150,27 +159,9 @@ export default function App() {
             <div style={{fontSize:'1.5rem', alignSelf:'center'}}>VS</div>
             <div style={{textAlign:'center'}}><h3>LDS</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
-          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}><option value="">Ganador</option><option value="RDM">RDM</option><option value="LDS">LDS</option><option value="Empate">Empate</option></select>
-          <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { winner: giraForm.team, createdAt: serverTimestamp() }); } }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>Cargar Punto</button>
+          <button onClick={async () => { const w = prompt("Ganador (RDM / LDS / Empate):"); if(w && checkAdmin()) await addDoc(collection(db, "gira"), { winner: w, createdAt: serverTimestamp() }); }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>+ Resultado Gira (Admin)</button>
         </div>
       )}
-
-      {view === "admin" && isAdmin && (
-        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid maroon' }}>
-          <h3 style={{color:'maroon'}}>Panel Admin</h3>
-          <form onSubmit={async (e) => { e.preventDefault(); await addDoc(collection(db, "players"), { name: e.target.n.value, mat: e.target.m.value }); e.target.reset(); }}>
-            <input name="n" placeholder="Nombre" style={inputStyle} required /><input name="m" placeholder="Matricula" style={inputStyle} required /><button type="submit" style={btnStyle}>+ Jugador</button>
-          </form>
-          <h4 style={{marginTop:'20px'}}>Jugadores</h4>
-          {players.map(p => <div key={p.id} style={rowStyle}><span>{p.name}</span><button onClick={()=>deleteDoc(doc(db,"players",p.id))} style={{background:'red', color:'white', border:'none', borderRadius:'4px'}}>Borrar</button></div>)}
-          <h4 style={{marginTop:'20px'}}>Tarjetas</h4>
-          {scores.map(s => <div key={s.id} style={rowStyle}><span>{s.date} - {players.find(p=>p.id===s.playerId)?.name}</span><button onClick={()=>deleteDoc(doc(db,"scores",s.id))} style={{background:'red', color:'white', border:'none', borderRadius:'4px'}}>X</button></div>)}
-        </div>
-      )}
-
-      <footer style={{ marginTop: '40px', textAlign: 'center' }}>
-        {!isAdmin ? <button onClick={() => prompt("PIN:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#000' }}>.</button> : <div style={{display:'flex', gap:'5px', justifyContent:'center'}}><button onClick={() => setView("admin")} style={btnStyle}>Panel Admin</button><button onClick={()=>setIsAdmin(false)} style={{...btnStyle, background:'maroon'}}>Salir</button></div>}
-      </footer>
     </div>
   );
 }
