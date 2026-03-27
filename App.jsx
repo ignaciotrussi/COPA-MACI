@@ -45,7 +45,6 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Gira Form State
   const [giraForm, setGiraForm] = useState({ team: "", modality: "", p1: "", p2: "", rival1: "", rival2: "" });
   const [card, setCard] = useState({ playerId: "", date: "", course: "", otherCourse: "", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false });
 
@@ -73,27 +72,38 @@ export default function App() {
         const gB9A = (a.grossHoles || []).slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
         const gB9B = (b.grossHoles || []).slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
         if (gB9A !== gB9B) return gB9A - gB9B;
-        for (let i = 17; i >= 0; i--) { if ((parseInt(a.grossHoles?.[i])||0) !== (parseInt(b.grossHoles?.[i])||0)) return (parseInt(a.grossHoles?.[i])||0) - (parseInt(b.grossHoles?.[i])||0); }
+        for (let i = 17; i >= 0; i--) { 
+          const vA = parseInt(a.grossHoles?.[i]) || 0;
+          const vB = parseInt(b.grossHoles?.[i]) || 0;
+          if (vA !== vB) return vA - vB; 
+        }
         return 0;
       });
-      rankedDay.forEach((s, idx) => { if (stats[s.playerId]) { let p = idx < 6 ? PTS_TABLE[idx] : 2; if (s.longDrive) p += 1; if (s.bestApproach) p += 1; stats[s.playerId].totalPts += p; } });
+      rankedDay.forEach((s, idx) => { 
+        if (stats[s.playerId]) { 
+          let p = idx < 6 ? PTS_TABLE[idx] : 2; 
+          if (s.longDrive) p += 1; 
+          if (s.bestApproach) p += 1; 
+          stats[s.playerId].totalPts += p; 
+        } 
+      });
     });
     return Object.values(stats).sort((a, b) => b.totalPts - a.totalPts);
   };
 
   const btnStyle = { background: '#1b331b', color: '#e0e0e0', border: '1px solid #2d4a2d', padding: '6px 10px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' };
-  const inputStyle = { width: '100%', padding: '10px', margin: '8px 0', background: '#1a1a1a', border: '1px solid #333', color: 'white', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' };
+  const inputStyle = { width: '100%', padding: '10px', margin: '8px 0', background: '#111', border: '1px solid #333', color: 'white', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' };
 
-  if (loading) return <div style={{background:'#0a1a0a', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Cargando...</div>;
+  if (loading) return <div style={{background:'#000', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Cargando Copa Maci...</div>;
 
   return (
-    <div style={{ background: '#0a1a0a', color: 'white', minHeight: '100vh', padding: '20px', boxSizing: 'border-box' }}>
+    <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '20px', boxSizing: 'border-box' }}>
       <header style={{ textAlign: 'center', marginBottom: '20px' }}>
         <LogoSVG size={70} />
         <h1 style={{ fontSize: '1.4rem', margin: '10px 0' }}>COPA MACI 2026</h1>
       </header>
 
-      <nav style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '25px' }}>
+      <nav style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '25px' }}>
         <button onClick={() => setView("card")} style={btnStyle}>⛳ Cargar</button>
         <button onClick={() => setView("ranking")} style={btnStyle}>⛳ Ranking</button>
         <button onClick={() => setView("gross")} style={btnStyle}>⛳ Gross</button>
@@ -102,6 +112,7 @@ export default function App() {
 
       {view === "ranking" && (
         <div>
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688' }}>Leaderboard (Puntos)</h2>
           {getAnnualRanking().map((p, i) => (
             <div key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
               <div><div>{i + 1}. {p.name}</div><div style={{fontSize:'0.65rem', color:'#555'}}>Mat: {p.mat}</div></div>
@@ -111,9 +122,21 @@ export default function App() {
         </div>
       )}
 
+      {view === "gross" && (
+        <div>
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688' }}>Ranking Mejor Gross</h2>
+          {[...scores].sort((a,b) => (a.totalGross || 0) - (b.totalGross || 0)).map((s, i) => (
+            <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
+              <span>{players.find(p => p.id === s.playerId)?.name || "---"}</span>
+              <span style={{fontWeight:'bold'}}>{s.totalGross} G</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {view === "card" && (
-        <div style={{ background: '#0f0f0f', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
-          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); setView("ranking"); }}>
+        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
+          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); alert("Guardado"); setView("ranking"); }}>
             <select required style={inputStyle} onChange={e => setCard({...card, playerId: e.target.value})}>
               <option value="">Jugador</option>
               {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -125,31 +148,28 @@ export default function App() {
                   onChange={e => { const nh = [...card.grossHoles]; nh[i] = e.target.value; setCard({...card, grossHoles: nh}); }} />
               ))}
             </div>
-            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR</button>
+            <div style={{display:'flex', justifyContent:'space-around', marginTop:'15px'}}>
+               <label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, longDrive: e.target.checked})} /> Long Drive</label>
+               <label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, bestApproach: e.target.checked})} /> Approach</label>
+            </div>
+            <button type="submit" style={{...btnStyle, width:'100%', marginTop:'15px', padding:'12px', justifyContent:'center'}}>GUARDAR TARJETA</button>
           </form>
         </div>
       )}
 
       {view === "gira" && (
-        <div style={{ background: '#0f0f0f', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
+        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
           <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '20px', background:'#111', padding:'10px', borderRadius:'10px' }}>
             <div style={{textAlign:'center'}}><h3>RDM</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'RDM' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
             <div style={{fontSize:'1.5rem', alignSelf:'center'}}>VS</div>
             <div style={{textAlign:'center'}}><h3>LDS</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
-          
-          <h4 style={{color:'#88a688', margin:'10px 0'}}>Nuevo Partido Gira</h4>
           <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}>
             <option value="">Tu Equipo</option><option value="RDM">RDM</option><option value="LDS">LDS</option>
           </select>
           <select style={inputStyle} onChange={e => setGiraForm({...giraForm, modality: e.target.value})}>
             {MODALIDADES_AAG.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, p1: e.target.value})}>
-            <option value="">Jugador 1</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {giraForm.modality === "Fourball" && <select style={inputStyle} onChange={e => setGiraForm({...giraForm, p2: e.target.value})}><option value="">Pareja</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
-          
           <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
             <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { ...giraForm, winner: giraForm.team, createdAt: serverTimestamp() }); alert("Ganó " + giraForm.team); } }} style={{...btnStyle, flex:1, justifyContent:'center', background:'#2e4d2e'}}>Ganamos (1pt)</button>
             <button onClick={async () => { if(giraForm.team) { await addDoc(collection(db, "gira"), { ...giraForm, winner: "Empate", createdAt: serverTimestamp() }); alert("Empate"); } }} style={{...btnStyle, flex:1, justifyContent:'center'}}>Empate (0.5)</button>
@@ -158,18 +178,20 @@ export default function App() {
       )}
 
       {view === "admin" && isAdmin && (
-        <div style={{ background: '#0f0f0f', padding: '15px', borderRadius: '15px' }}>
+        <div style={{ background: '#080808', padding: '15px', borderRadius: '15px' }}>
           <form onSubmit={async (e) => { e.preventDefault(); await addDoc(collection(db, "players"), { name: e.target.name.value, mat: e.target.mat.value }); e.target.reset(); }}>
             <input name="name" placeholder="Nombre" style={inputStyle} required /><input name="mat" placeholder="Matrícula" style={inputStyle} required />
             <button type="submit" style={{...btnStyle, width:'100%', justifyContent:'center'}}>+ Agregar Jugador</button>
           </form>
-          <h4 style={{marginTop:'20px'}}>Borrar Tarjetas</h4>
-          {scores.map(s => <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'5px'}}>{players.find(p=>p.id===s.playerId)?.name} <button onClick={()=>deleteDoc(doc(db,"scores",s.id))} style={{background:'red', border:'none', color:'white'}}>X</button></div>)}
+          <h4 style={{marginTop:'20px'}}>Gestionar Jugadores / Tarjetas</h4>
+          {players.map(p => <div key={p.id} style={{display:'flex', justifyContent:'space-between', padding:'5px'}}>{p.name} <button onClick={()=>deleteDoc(doc(db,"players",p.id))} style={{background:'red', border:'none', color:'white', borderRadius:'4px'}}>X</button></div>)}
+          <hr style={{opacity:0.1}}/>
+          {scores.map(s => <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'5px', fontSize:'0.7rem'}}>{s.date} - {players.find(p=>p.id===s.playerId)?.name} <button onClick={()=>deleteDoc(doc(db,"scores",s.id))} style={{background:'red', border:'none', color:'white', borderRadius:'4px'}}>X</button></div>)}
         </div>
       )}
 
       <footer style={{ marginTop: '40px', textAlign: 'center' }}>
-        {!isAdmin ? <button onClick={() => prompt("PIN:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#0a1a0a' }}>.</button> : <button onClick={() => setView("admin")} style={btnStyle}>Panel Admin</button>}
+        {!isAdmin ? <button onClick={() => prompt("PIN:") === "1234" && setIsAdmin(true)} style={{ background: 'none', border: 'none', color: '#000' }}>.</button> : <div style={{display:'flex', gap:'5px', justifyContent:'center'}}><button onClick={() => setView("admin")} style={btnStyle}>Panel Admin</button><button onClick={()=>setIsAdmin(false)} style={{...btnStyle, background:'maroon'}}>Salir</button></div>}
       </footer>
     </div>
   );
