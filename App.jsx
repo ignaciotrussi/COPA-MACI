@@ -43,6 +43,7 @@ export default function App() {
   const [scores, setScores] = useState([]);
   const [giraMatches, setGiraMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [giraForm, setGiraForm] = useState({ team: "", modality: "", p1: "", p2: "", rival1: "", rival2: "" });
   const [card, setCard] = useState({ playerId: "", date: "", course: "", otherCourse: "", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false });
 
   useEffect(() => {
@@ -78,14 +79,7 @@ export default function App() {
         }
         return 0;
       });
-      rankedDay.forEach((s, idx) => { 
-        if (stats[s.playerId]) { 
-          let p = idx < 6 ? PTS_TABLE[idx] : 2; 
-          if (s.longDrive) p += 1; 
-          if (s.bestApproach) p += 1; 
-          stats[s.playerId].totalPts += p; 
-        } 
-      });
+      rankedDay.forEach((s, idx) => { if (stats[s.playerId]) { let p = idx < 6 ? PTS_TABLE[idx] : 2; if (s.longDrive) p += 1; if (s.bestApproach) p += 1; stats[s.playerId].totalPts += p; } });
     });
     return Object.values(stats).sort((a, b) => b.totalPts - a.totalPts);
   };
@@ -93,7 +87,7 @@ export default function App() {
   const btnStyle = { background: '#1b331b', color: '#e0e0e0', border: '1px solid #2d4a2d', padding: '6px 10px', borderRadius: '12px', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' };
   const inputStyle = { width: '100%', padding: '10px', margin: '8px 0', background: '#111', border: '1px solid #333', color: 'white', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' };
 
-  if (loading) return <div style={{background:'#000', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Copa Maci...</div>;
+  if (loading) return <div style={{background:'#000', color:'white', height:'100vh', display:'flex', justifyContent:'center', alignItems:'center'}}>Cargando Copa Maci...</div>;
 
   return (
     <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '20px', boxSizing: 'border-box' }}>
@@ -120,12 +114,7 @@ export default function App() {
               </div>
             </div>
           ))}
-          <button onClick={() => {
-            if(checkAdmin()) {
-              const n = prompt("Nombre:"); const m = prompt("Matrícula:");
-              if(n && m) addDoc(collection(db, "players"), { name: n, mat: m });
-            }
-          }} style={{...btnStyle, margin:'20px auto', display:'block'}}>+ Agregar / Quitar Jugador</button>
+          <button onClick={() => { if(checkAdmin()) { const n = prompt("Nombre:"); const m = prompt("Matrícula:"); if(n && m) addDoc(collection(db, "players"), { name: n, mat: m }); } }} style={{...btnStyle, margin:'20px auto', display:'block'}}>+ Agregar / Quitar Jugador</button>
         </div>
       )}
 
@@ -142,8 +131,9 @@ export default function App() {
 
       {view === "card" && (
         <div style={{ background: '#080808', padding: '15px', borderRadius: '15px', border: '1px solid #1b331b' }}>
-          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); alert("Guardado"); setView("ranking"); }}>
+          <form onSubmit={async (e) => { e.preventDefault(); const tg = card.grossHoles.reduce((a, v) => a + (parseInt(v) || 0), 0); const tn = tg - (parseInt(card.hcp) || 0); await addDoc(collection(db, "scores"), { ...card, totalGross: tg, totalNet: tn, createdAt: serverTimestamp() }); setView("ranking"); }}>
             <select required style={inputStyle} onChange={e => setCard({...card, playerId: e.target.value})}><option value="">Jugador</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            <select style={inputStyle} onChange={e => setCard({...card, course: e.target.value})}>{COURSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
             <div style={{display:'flex', gap:'5px'}}><input type="date" required style={inputStyle} onChange={e => setCard({...card, date: e.target.value})} /><input type="number" placeholder="HCP" style={inputStyle} onChange={e => setCard({...card, hcp: e.target.value})} /></div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '3px' }}>{card.grossHoles.map((v, i) => (<input key={i} type="number" placeholder={i+1} style={{ ...inputStyle, padding: '5px', textAlign: 'center', fontSize: '0.7rem' }} onChange={e => { const nh = [...card.grossHoles]; nh[i] = e.target.value; setCard({...card, grossHoles: nh}); }} />))}</div>
             <div style={{display:'flex', justifyContent:'space-around', marginTop:'15px'}}><label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, longDrive: e.target.checked})} /> Long Drive</label><label style={{fontSize:'0.7rem'}}><input type="checkbox" onChange={e => setCard({...card, bestApproach: e.target.checked})} /> Approach</label></div>
@@ -159,7 +149,23 @@ export default function App() {
             <div style={{fontSize:'1.5rem', alignSelf:'center'}}>VS</div>
             <div style={{textAlign:'center'}}><h3>LDS</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
-          <button onClick={async () => { const w = prompt("Ganador (RDM / LDS / Empate):"); if(w && checkAdmin()) await addDoc(collection(db, "gira"), { winner: w, createdAt: serverTimestamp() }); }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>+ Resultado Gira (Admin)</button>
+          
+          <h4 style={{color:'#88a688', margin:'10px 0'}}>Nuevo Partido Gira</h4>
+          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}>
+            <option value="">Tu Equipo</option><option value="RDM">RDM</option><option value="LDS">LDS</option>
+          </select>
+          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, modality: e.target.value})}>
+            {MODALIDADES_AAG.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select style={inputStyle} onChange={e => setGiraForm({...giraForm, p1: e.target.value})}>
+            <option value="">Jugador 1</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {giraForm.modality === "Fourball" && <select style={inputStyle} onChange={e => setGiraForm({...giraForm, p2: e.target.value})}><option value="">Pareja</option>{players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+          
+          <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
+            <button onClick={async () => { if(giraForm.team && checkAdmin()) { await addDoc(collection(db, "gira"), { ...giraForm, winner: giraForm.team, createdAt: serverTimestamp() }); alert("Ganó " + giraForm.team); } }} style={{...btnStyle, flex:1, justifyContent:'center', background:'#2e4d2e'}}>Ganamos (1pt)</button>
+            <button onClick={async () => { if(giraForm.team && checkAdmin()) { await addDoc(collection(db, "gira"), { ...giraForm, winner: "Empate", createdAt: serverTimestamp() }); alert("Empate"); } }} style={{...btnStyle, flex:1, justifyContent:'center'}}>Empate (0.5)</button>
+          </div>
         </div>
       )}
     </div>
