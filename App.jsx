@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, getDocs } from "firebase/firestore";
-// IMPORTANTE: Esto asegura que Vite encuentre tu imagen
-import logoImg from "./logo.jpg";
 
-// ─── CONFIGURACIÓN FIREBASE ──────────────────────────────────────────────────
+// --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,6 +15,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// --- CONSTANTES ---
 const INITIAL_PLAYERS = [
   { name: "Esteban Chicco", mat: "56229" }, { name: "Juan José Hardoy", mat: "112534" },
   { name: "Manuel Gosende", mat: "175387" }, { name: "Rodrigo López Martínez", mat: "132679" },
@@ -28,7 +27,7 @@ const INITIAL_PLAYERS = [
 
 const COURSES = ["Hacoaj", "Jockey Club", "Los Lagartos", "Hindú Club", "CASI", "Otro"];
 const MODALIDADES_AAG = ["Medal Play", "Fourball", "Match Play", "Laguneada", "Scramble"];
-const PTS_TABLE = [10, 8, 6, 5, 4, 3]; 
+const PTS_TABLE = [10, 8, 6, 5, 4, 3]; // Corregido: Puntos posiciones 1-6
 
 export default function App() {
   const [view, setView] = useState("ranking");
@@ -78,8 +77,9 @@ export default function App() {
         const gB9B = (b.grossHoles || []).slice(9).reduce((s, h) => s + (parseInt(h) || 0), 0);
         if (gB9A !== gB9B) return gB9A - gB9B;
         for (let i = 17; i >= 0; i--) { 
-          if ((parseInt(a.grossHoles?.[i])||0) !== (parseInt(b.grossHoles?.[i])||0)) 
-            return (parseInt(a.grossHoles?.[i])||0) - (parseInt(b.grossHoles?.[i])||0);
+          const vA = parseInt(a.grossHoles?.[i]) || 0;
+          const vB = parseInt(b.grossHoles?.[i]) || 0;
+          if (vA !== vB) return vA - vB; 
         }
         return 0;
       });
@@ -104,7 +104,8 @@ export default function App() {
     <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '20px', boxSizing: 'border-box', fontFamily: 'sans-serif' }}>
       
       <header style={{ textAlign: 'center', marginBottom: '20px' }}>
-        <img src={logoImg} alt="Logo" style={{ width: '140px', height: 'auto', marginBottom: '10px' }} />
+        {/* Usamos ruta directa al logo en raíz */}
+        <img src="/logo.jpg" alt="Copa Maci" style={{ width: '140px', height: 'auto', marginBottom: '10px' }} />
         <h1 style={{ fontSize: '1.4rem', margin: '10px 0' }}>COPA MACI 2026</h1>
         <div style={{ height: '1px', background: 'linear-gradient(90deg, transparent, #2d4a2d, transparent)', marginTop: '10px' }}></div>
       </header>
@@ -133,6 +134,7 @@ export default function App() {
 
       {view === "gross" && (
         <div>
+          <h2 style={{ textAlign: 'center', fontSize: '1rem', color: '#88a688' }}>Ranking Mejor Gross</h2>
           {[...scores].sort((a,b) => (a.totalGross || 0) - (b.totalGross || 0)).map((s, i) => (
             <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
               <span>{players.find(p => p.id === s.playerId)?.name || "---"} ({s.totalGross} G)</span>
@@ -162,7 +164,7 @@ export default function App() {
             <div style={{textAlign:'center'}}><h3>LDS</h3><p style={{fontSize:'2rem', margin:0}}>{giraMatches.reduce((acc, m) => acc + (m.winner === 'LDS' ? 1 : m.winner === 'Empate' ? 0.5 : 0), 0)}</p></div>
           </div>
           <select style={inputStyle} onChange={e => setGiraForm({...giraForm, team: e.target.value})}><option value="">Ganador</option><option value="RDM">RDM</option><option value="LDS">LDS</option><option value="Empate">Empate</option></select>
-          <button onClick={async () => { if(giraForm.team && checkAdmin()) { await addDoc(collection(db, "gira"), { winner: giraForm.team, createdAt: serverTimestamp() }); } }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>Cargar Punto</button>
+          <button onClick={async () => { if(giraForm.team && checkAdmin()) { await addDoc(collection(db, "gira"), { winner: giraForm.team, createdAt: serverTimestamp() }); } }} style={{...btnStyle, width:'100%', justifyContent:'center'}}>Cargar Punto (Admin)</button>
         </div>
       )}
     </div>
