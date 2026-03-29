@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, getDocs, updateDoc, where } from "firebase/firestore";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 import logoMaci from "./logo.jpg";
 
 const firebaseConfig = {
@@ -39,27 +39,12 @@ export default function App() {
 
   const checkAdmin = () => prompt("PIN de Administrador:") === "6677";
 
-  // FUNCIÓN PARA LIMPIAR DATOS CORRUPTOS
-  const limpiarDatosCorruptos = async () => {
-    if(!checkAdmin()) return;
-    const q = await getDocs(collection(db, "scores"));
-    let borrados = 0;
-    q.forEach(async (d) => {
-      const data = d.data();
-      if (!data.playerId || !data.grossHoles || data.grossHoles.length === 0) {
-        await deleteDoc(doc(db, "scores", d.id));
-        borrados++;
-      }
-    });
-    alert(`Se eliminaron ${borrados} registros corruptos.`);
-  };
-
   const getAnnualRanking = () => {
     const stats = {};
     players.forEach(p => { stats[p.id] = { ...p, totalPts: 0, bestMonthScore: null }; });
     const monthlyBest = {};
     scores.forEach(s => {
-      if(!s.grossHoles) return; // Protección contra pantalla negra
+      if(!s.grossHoles) return;
       const date = new Date(s.date + "T12:00:00");
       const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
       const net = (parseInt(s.totalGross) || 0) - (parseInt(s.hcp) || 0);
@@ -86,7 +71,7 @@ export default function App() {
   const getGrossRanking = () => {
     const bestByPlayer = {};
     scores.forEach(s => {
-      if(!s.grossHoles) return; // Protección
+      if(!s.grossHoles) return;
       const g = parseInt(s.totalGross) || 999;
       if (!bestByPlayer[s.playerId] || g < bestByPlayer[s.playerId].totalGross) bestByPlayer[s.playerId] = s;
     });
@@ -106,23 +91,17 @@ export default function App() {
   return (
     <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '15px', fontFamily: 'sans-serif' }}>
       
-      {/* VISOR DE DETALLE CON PROTECCIÓN */}
       {selectedScore && (
         <div style={{position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', padding:'20px', boxSizing:'border-box', overflowY:'auto', zIndex: 100}}>
           <button onClick={() => setSelectedScore(null)} style={{...btnStyle, marginBottom:'20px'}}>✕ Cerrar</button>
-          <h2 style={{color:'#bbf7bb'}}>{players.find(p => p.id === selectedScore.playerId)?.name || "Desconocido"}</h2>
-          
-          {selectedScore.grossHoles ? (
-            <>
-              <p style={{fontSize:'0.9rem'}}>{selectedScore.date} | {selectedScore.course}</p>
-              <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px', margin:'20px 0'}}>
-                {selectedScore.grossHoles.map((h, i) => (
-                  <div key={i} style={{background:'#222', padding:'10px 5px', textAlign:'center', borderRadius:'5px'}}>{i+1}<br/><strong>{h}</strong></div>
-                ))}
-              </div>
-            </>
-          ) : <p>Error: Esta tarjeta no contiene datos de hoyos.</p>}
-
+          <h2 style={{color:'#bbf7bb'}}>{players.find(p => p.id === selectedScore.playerId)?.name}</h2>
+          <p>{selectedScore.date} | {selectedScore.course}</p>
+          <p>Neto: {selectedScore.net} {selectedScore.longDrive && " | 🚀 LD"} {selectedScore.bestApproach && " | 🎯 BA"}</p>
+          <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px', margin:'20px 0'}}>
+            {selectedScore.grossHoles.map((h, i) => (
+              <div key={i} style={{background:'#222', padding:'10px 5px', textAlign:'center', borderRadius:'5px'}}>{i+1}<br/><strong>{h}</strong></div>
+            ))}
+          </div>
           <div style={{display:'flex', gap:'10px'}}>
             <button onClick={() => { if(checkAdmin()) { setIsEditing(selectedScore.id); setCard(selectedScore); setSelectedScore(null); setView("card"); } }} style={{...btnStyle, flex:1, background:'#ca8a04'}}>✏️ Editar</button>
             <button onClick={() => { if(checkAdmin()) { deleteDoc(doc(db, "scores", selectedScore.id)); setSelectedScore(null); } }} style={{...btnStyle, flex:1, background:'maroon'}}>🗑️ Borrar</button>
@@ -142,10 +121,21 @@ export default function App() {
         <button onClick={() => { setIsEditing(null); setCard({ playerId: "", date: "", course: "Hacoaj", hcp: 0, grossHoles: Array(18).fill(0), longDrive: false, bestApproach: false }); setView("card"); }} style={btnStyle}>⛳ Cargar</button>
       </nav>
 
+      {view === "ranking" && (
+        <div>
+          {getAnnualRanking().map((p, i) => (
+            <div key={p.id} style={{padding:'12px', borderBottom:'1px solid #1b331b'}} onClick={() => p.bestMonthScore && setSelectedScore(p.bestMonthScore)}>
+              <div style={{display:'flex', justifyContent:'space-between'}}>
+                <span>{i + 1}. <strong>{p.name}</strong></span>
+                <span style={{color:'#bbf7bb'}}>{p.totalPts} pts ⮕</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {view === "gross" && (
         <div>
-          <h3 style={{textAlign:'center', color:'#88a688'}}>RANKING GROSS</h3>
-          <button onClick={limpiarDatosCorruptos} style={{...btnStyle, background:'maroon', margin:'10px auto', display:'block'}}>⚠️ Limpiar Errores (Admin)</button>
           {getGrossRanking().map((s, i) => (
             <div key={s.id} style={{padding:'12px', borderBottom:'1px solid #1b331b'}} onClick={() => setSelectedScore(s)}>
               <div style={{display:'flex', justifyContent:'space-between'}}>
@@ -156,30 +146,15 @@ export default function App() {
           ))}
         </div>
       )}
-      
-      {/* Resto de las vistas (Ranking y Giras) se mantienen igual */}
-      {view === "ranking" && (
-        <div>
-          {getAnnualRanking().map((p, i) => (
-            <div key={p.id} style={{padding:'12px', borderBottom:'1px solid #1b331b'}} onClick={() => p.bestMonthScore && setSelectedScore(p.bestMonthScore)}>
-              <div style={{display:'flex', justifyContent:'space-between'}}>
-                <span>{i + 1}. {p.name}</span>
-                <span style={{color:'#bbf7bb'}}>{p.totalPts} pts ⮕</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {view === "gira" && (
         <div>
-           {/* (Contenido de Giras igual al anterior) */}
-           <div style={{display:'flex', justifyContent:'space-around', background:'#111', padding:'15px', borderRadius:'15px', marginBottom:'20px', border:'1px solid #2d4a2d'}}>
+          <div style={{display:'flex', justifyContent:'space-around', background:'#111', padding:'15px', borderRadius:'15px', marginBottom:'20px', border:'1px solid #2d4a2d'}}>
             <div><div style={{fontSize:'0.7rem', color:'#3b82f6'}}>RDM</div><div style={{fontSize:'1.8rem', fontWeight:'bold'}}>{giraPuntos.RDM}</div></div>
             <div style={{fontSize:'1.2rem', alignSelf:'center', color:'#555'}}>VS</div>
             <div><div style={{fontSize:'0.7rem', color:'#ef4444'}}>LDS</div><div style={{fontSize:'1.8rem', fontWeight:'bold'}}>{giraPuntos.LDS}</div></div>
           </div>
-          <form style={{background:'#080808', padding:'15px', borderRadius:'15px', border:'1px solid #1b331b'}} onSubmit={async (e) => {
+          <form style={{background:'#080808', padding:'15px', borderRadius:'15px'}} onSubmit={async (e) => {
             e.preventDefault();
             await addDoc(collection(db, "gira"), { ...giraForm, createdAt: serverTimestamp() });
             setGiraForm({...giraForm, rival: ""});
@@ -206,7 +181,7 @@ export default function App() {
           </form>
           {giraMatches.map(m => (
             <div key={m.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #222', fontSize:'0.85rem'}}>
-              <span><strong style={{color: m.equipo === 'RDM' ? '#3b82f6' : '#ef4444'}}>{m.equipo}</strong>: {m.jugador1} vs {m.rival} ({m.modalidad})</span>
+              <span><strong style={{color: m.equipo === 'RDM' ? '#3b82f6' : '#ef4444'}}>{m.equipo}</strong>: {m.jugador1} vs {m.rival}</span>
               <span>+{m.puntos} <button onClick={() => { if(checkAdmin()) deleteDoc(doc(db, "gira", m.id)); }} style={{color:'maroon', border:'none', background:'none'}}>×</button></span>
             </div>
           ))}
@@ -232,14 +207,26 @@ export default function App() {
             {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <input type="number" placeholder="Hcp" style={inputStyle} value={card.hcp} onChange={e => setCard({...card, hcp: e.target.value})} required />
-          <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px'}}>
+          
+          <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px', marginBottom:'15px'}}>
             {card.grossHoles.map((h, i) => (
               <input key={i} type="number" placeholder={i+1} value={h} style={{...inputStyle, padding:'8px', textAlign:'center', margin:0}} 
                 onChange={e => { const n = [...card.grossHoles]; n[i] = e.target.value; setCard({...card, grossHoles: n}); }} 
               />
             ))}
           </div>
-          <button type="submit" style={{...btnStyle, width:'100%', marginTop:'20px', background:'#2d4a2d'}}>{isEditing ? 'GUARDAR' : 'SUBIR'}</button>
+
+          {/* CASILLEROS EXTRA REINCORPORADOS */}
+          <div style={{display:'flex', gap:'15px', marginBottom:'20px'}}>
+            <label style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'0.8rem', cursor:'pointer'}}>
+              <input type="checkbox" checked={card.longDrive} onChange={e => setCard({...card, longDrive: e.target.checked})} /> 🚀 Long Drive
+            </label>
+            <label style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'0.8rem', cursor:'pointer'}}>
+              <input type="checkbox" checked={card.bestApproach} onChange={e => setCard({...card, bestApproach: e.target.checked})} /> 🎯 Approach
+            </label>
+          </div>
+
+          <button type="submit" style={{...btnStyle, width:'100%', background:'#2d4a2d', padding:'15px'}}>{isEditing ? 'GUARDAR CAMBIOS' : 'SUBIR TARJETA'}</button>
         </form>
       )}
     </div>
