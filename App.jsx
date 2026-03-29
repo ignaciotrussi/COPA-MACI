@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 import logoMaci from "./logo.jpg";
 
+// --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -88,6 +89,30 @@ export default function App() {
 
   return (
     <div style={{ background: '#000', color: 'white', minHeight: '100vh', padding: '15px', fontFamily: 'sans-serif' }}>
+      
+      {/* VISOR DE DETALLE (PARA RANKING Y GROSS) */}
+      {selectedScore && (
+        <div style={{position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', padding:'20px', boxSizing:'border-box', overflowY:'auto', zIndex: 100}}>
+          <button onClick={() => setSelectedScore(null)} style={{...btnStyle, marginBottom:'20px'}}>✕ Cerrar</button>
+          <h2 style={{color:'#bbf7bb'}}>{players.find(p => p.id === selectedScore.playerId)?.name}</h2>
+          <p style={{fontSize:'0.9rem'}}>{selectedScore.date} | {selectedScore.course}</p>
+          <p style={{fontSize:'1.1rem', fontWeight:'bold'}}>Gross: {selectedScore.totalGross} | Hcp: {selectedScore.hcp} | Neto: {selectedScore.totalGross - selectedScore.hcp}</p>
+          
+          <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px', margin:'20px 0'}}>
+            {selectedScore.grossHoles.map((h, i) => (
+              <div key={i} style={{background:'#222', padding:'10px 5px', textAlign:'center', borderRadius:'5px', border:'1px solid #333'}}>
+                <span style={{fontSize:'0.6rem', color:'#888'}}>{i+1}</span><br/><strong>{h}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
+            <button onClick={() => { if(checkAdmin()) { setIsEditing(selectedScore.id); setCard(selectedScore); setSelectedScore(null); setView("card"); } }} style={{...btnStyle, flex:1, background:'#ca8a04', padding:'15px'}}>✏️ Editar</button>
+            <button onClick={() => { if(checkAdmin()) { deleteDoc(doc(db, "scores", selectedScore.id)); setSelectedScore(null); } }} style={{...btnStyle, flex:1, background:'maroon', padding:'15px'}}>🗑️ Borrar</button>
+          </div>
+        </div>
+      )}
+
       <header style={{ textAlign: 'center', marginBottom: '20px' }}>
         <img src={logoMaci} alt="Logo" style={{ width: '100px', marginBottom: '10px' }} />
         <h1 style={{ fontSize: '1.2rem', margin: 0 }}>COPA MACI 2026</h1>
@@ -102,6 +127,7 @@ export default function App() {
 
       {view === "ranking" && (
         <div>
+          <h3 style={{textAlign:'center', color:'#88a688', fontSize:'0.9rem', marginBottom:'15px'}}>RANKING POR PUNTOS</h3>
           {getAnnualRanking().map((p, i) => (
             <div key={p.id} style={{padding:'12px', borderBottom:'1px solid #1b331b'}} onClick={() => p.bestMonthScore && setSelectedScore(p.bestMonthScore)}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -110,30 +136,18 @@ export default function App() {
               </div>
             </div>
           ))}
-          {selectedScore && (
-            <div style={{position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.95)', padding:'20px', boxSizing:'border-box', overflowY:'auto', zIndex: 100}}>
-              <button onClick={() => setSelectedScore(null)} style={{...btnStyle, marginBottom:'20px'}}>✕ Cerrar</button>
-              <h2>{players.find(p => p.id === selectedScore.playerId)?.name}</h2>
-              <p>{selectedScore.date} | {selectedScore.course} | Neto: {selectedScore.net}</p>
-              <div style={{display:'grid', gridTemplateColumns:'repeat(6, 1fr)', gap:'5px', marginBottom:'20px'}}>
-                {selectedScore.grossHoles.map((h, i) => <div key={i} style={{background:'#222', padding:'10px', textAlign:'center', borderRadius:'5px'}}>{i+1}<br/>{h}</div>)}
-              </div>
-              <div style={{display:'flex', gap:'10px'}}>
-                <button onClick={() => { if(checkAdmin()) { setIsEditing(selectedScore.id); setCard(selectedScore); setSelectedScore(null); setView("card"); } }} style={{...btnStyle, flex:1, background:'#ca8a04'}}>Editar</button>
-                <button onClick={() => { if(checkAdmin()) { deleteDoc(doc(db, "scores", selectedScore.id)); setSelectedScore(null); } }} style={{...btnStyle, flex:1, background:'maroon'}}>Borrar</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
       {view === "gross" && (
         <div>
-          <h3 style={{textAlign:'center', color:'#88a688'}}>RANKING MEJOR GROSS</h3>
+          <h3 style={{textAlign:'center', color:'#88a688', fontSize:'0.9rem', marginBottom:'15px'}}>MEJOR GROSS POR JUGADOR</h3>
           {getGrossRanking().map((s, i) => (
-            <div key={s.id} style={{display:'flex', justifyContent:'space-between', padding:'12px', borderBottom:'1px solid #1b331b'}}>
-              <span>{i+1}. {players.find(p => p.id === s.playerId)?.name}</span>
-              <span style={{fontWeight:'bold'}}>{s.totalGross} G</span>
+            <div key={s.id} style={{padding:'12px', borderBottom:'1px solid #1b331b'}} onClick={() => setSelectedScore(s)}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <span>{i+1}. {players.find(p => p.id === s.playerId)?.name}</span>
+                <span style={{fontWeight:'bold'}}>{s.totalGross} G ⮕</span>
+              </div>
             </div>
           ))}
         </div>
