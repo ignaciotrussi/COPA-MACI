@@ -1,8 +1,8 @@
-const express = require('express');
-const mysql = require('mysql2');
-const cors = require('cors');
-const app = express();
+import express from 'express';
+import mysql from 'mysql2';
+import cors from 'cors';
 
+const app = express();
 app.use(cors());
 app.use(express.json());
 
@@ -11,7 +11,9 @@ const db = mysql.createPool({
   user: 'estudiotyt.com.a',
   password: 'wx0VCUMP',
   database: 'tyt_golf',
-  port: 3306
+  port: 3306,
+  waitForConnections: true,
+  connectionLimit: 10
 });
 
 app.get('/api/scores', (req, res) => {
@@ -24,7 +26,8 @@ app.get('/api/scores', (req, res) => {
 app.post('/api/scores', (req, res) => {
   const s = req.body;
   const sql = `INSERT INTO scores (playerId, dateLabel, monthKey, netScore, back9, longDrive, bestApproach, course, tee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-  const values = [s.playerId, s.dateLabel, s.monthKey, s.netScore, s.back9, s.longDrive, s.bestApproach, s.course, s.tee];
+  const values = [s.playerId, s.dateLabel, s.monthKey, s.netScore, s.back9, s.longDrive ? 1 : 0, s.bestApproach ? 1 : 0, s.course, s.tee];
+  
   db.query(sql, values, (err, result) => {
     if (err) return res.status(500).json(err);
     res.json({ id: result.insertId, ...s });
